@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Sample Markets Feed</title>
+    <link>https://example.com</link>
+    <description>Test feed</description>
+    <item>
+      <title>RBI holds repo rate at 5.5%</title>
+      <link>https://example.com/rbi-holds</link>
+      <guid>rbi-holds-001</guid>
+      <description><![CDATA[<p>The central bank kept rates <b>unchanged</b>.</p>]]></description>
+      <pubDate>Tue, 10 Nov 2026 04:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Crude oil jumps 4%</title>
+      <link>https://example.com/crude-jumps</link>
+      <description>Brent rallies on supply worries.</description>
+      <pubDate>Tue, 10 Nov 2026 05:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Item without a date</title>
+      <link>https://example.com/no-date</link>
+      <description>Should be skipped.</description>
+    </item>
+  </channel>
+</rss>

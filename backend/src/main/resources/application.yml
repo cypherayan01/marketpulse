@@ -1,0 +1,139 @@
+spring:
+  application:
+    name: marketpulse
+
+server:
+  port: ${PORT:8080}   # Render injects PORT
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+marketpulse:
+  # Shared secret the external scheduler sends in the X-Job-Token header. Required - jobs are rejected without it.
+  job-token: ${JOB_TOKEN:}
+
+  claude:
+    api-key: ${ANTHROPIC_API_KEY:}
+    triage-model: claude-haiku-5-5    # cheap, high-volume headline triage
+    brief-model: claude-opus-5-5      # daily briefs and explanations (later phases)
+
+  telegram:
+    bot-token: ${TELEGRAM_BOT_TOKEN:}
+    chat-id: ${TELEGRAM_CHAT_ID:}
+
+  email:
+    resend-api-key: ${RESEND_API_KEY:}
+    from: ${ALERT_EMAIL_FROM:MarketPulse <onboarding@resend.dev>}
+    to: ${ALERT_EMAIL_TO:}
+
+  news:
+    lookback: 45m          # only news newer than this is considered; poll every 15 min (slack for late scheduler runs)
+    impact-threshold: 7    # alert when Claude scores impact >= 7/10
+    batch-size: 20         # headlines per Claude call
+    feeds:
+      - name: ET Markets
+        url: https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms
+      - name: ET Economy
+        url: https://economictimes.indiatimes.com/news/economy/rssfeeds/1373380680.cms
+      - name: Business Standard Markets
+        url: https://www.business-standard.com/rss/markets-106.rss
+      - name: LiveMint Markets
+        url: https://www.livemint.com/rss/markets
+      - name: LiveMint Economy
+        url: https://www.livemint.com/rss/economy
+      - name: CNBC World
+        url: https://www.cnbc.com/id/100727362/device/rss/rss.html
+      - name: CNBC Economy
+        url: https://www.cnbc.com/id/20910258/device/rss/rss.html
+      - name: BBC Business
+        url: https://feeds.bbci.co.uk/news/business/rss.xml
+    # Pre-filter: only headlines containing one of these words/phrases are sent to Claude.
+    keywords:
+      # Indian policy & macro
+      - rbi
+      - repo rate
+      - monetary policy
+      - sebi
+      - budget
+      - gst
+      - inflation
+      - cpi
+      - wpi
+      - gdp
+      - iip
+      - fiscal deficit
+      - rupee
+      - fii
+      - fpi
+      - dii
+      - nifty
+      - sensex
+      - bank nifty
+      # Global macro
+      - fed
+      - federal reserve
+      - powell
+      - rate cut
+      - rate hike
+      - interest rate
+      - treasury yield
+      - bond yield
+      - dollar index
+      - recession
+      - stimulus
+      - tariff
+      - tariffs
+      - trade war
+      - sanctions
+      - opec
+      - crude
+      - brent
+      - oil prices
+      - gold
+      - nasdaq
+      - s&p 500
+      - dow jones
+      - china
+      # Geopolitics & shocks
+      - war
+      - missile
+      - attack
+      - ceasefire
+      - conflict
+      - election
+      - crash
+      - selloff
+      - sell-off
+      # Corporate
+      - earnings
+      - q1
+      - q2
+      - q3
+      - q4
+      - quarterly results
+      - net profit
+      - guidance
+      - merger
+      - acquisition
+      - stake sale
+      - block deal
+      - buyback
+      - downgrade
+      - upgrade
+      - ipo
+      - order win
+    # Your stocks - news mentioning them always goes to Claude.
+    watchlist:
+      - Reliance
+      - HDFC Bank
+      - ICICI Bank
+      - Infosys
+      - TCS
+      - SBI
+      - Tata Motors
+      - Larsen
+      - Bharti Airtel
+      - ITC
