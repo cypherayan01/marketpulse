@@ -16,7 +16,7 @@ import java.util.List;
  * or rate-limit - it sits behind {@link MarketDataClient} so a broker API can replace it later.
  * Requests are spaced out and HTTP 429 responses are retried with backoff.
  */
-public class YahooChartClient implements MarketDataClient {
+public class YahooChartClient implements MarketDataClient, IntradayDataClient {
 
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
     private static final List<Duration> RETRY_BACKOFF = List.of(Duration.ofSeconds(2), Duration.ofSeconds(5));
@@ -44,9 +44,38 @@ public class YahooChartClient implements MarketDataClient {
 
     @Override
     public List<Candle> dailyCandles(String symbol) {
+        return toCandles(symbol, fetchWithRetry(symbol, "2y", "1d"));
+    }
+
+    @Override
+    public List<IntradayCandle> intradayCandles(String symbol) {
+        ChartResponse response = fetchWithRetry(symbol, "1d", "15m");
+        if (response == null || response.chart() == null || response.chart().result() == null
+                || response.chart().result().isEmpty()) {
+            return List.of();
+        }
+        Result result = response.chart().result().getFirst();
+        List<IntradayCandle> bars = new ArrayList<>();
+        if (result.timestamp() == null || result.indicators() == null || result.indicators().quote() == null) {
+            return bars;
+        }
+        Quote q = result.indicators().quote().getFirst();
+        for (int i = 0; i < result.timestamp().size(); i++) {
+            Double open = q.open().get(i), high = q.high().get(i), low = q.low().get(i), close = q.close().get(i);
+            if (open == null || high == null || low == null || close == null) {
+                continue;
+            }
+            Long volume = q.volume().get(i);
+            bars.add(new IntradayCandle(Instant.ofEpochSecond(result.timestamp().get(i)), open, high, low, close,
+                    volume == null ? 0 : volume));
+        }
+        return bars;
+    }
+
+    private ChartResponse fetchWithRetry(String symbol, String range, String interval) {
         for (int attempt = 0; ; attempt++) {
             try {
-                return toCandles(symbol, fetch(symbol));
+                return fetch(symbol, range, interval);
             } catch (HttpClientErrorException.TooManyRequests e) {
                 if (attempt >= RETRY_BACKOFF.size()) {
                     throw new IllegalStateException("Yahoo rate limit hit for " + symbol + ", giving up", e);
@@ -56,14 +85,14 @@ public class YahooChartClient implements MarketDataClient {
         }
     }
 
-    private synchronized ChartResponse fetch(String symbol) {
+    private synchronized ChartResponse fetch(String symbol, String range, String interval) {
         long sinceLast = System.nanoTime() - lastRequestNanos;
         if (lastRequestNanos != 0 && sinceLast < minInterval.toNanos()) {
             sleeper.sleep(Duration.ofNanos(minInterval.toNanos() - sinceLast));
         }
         try {
             return client.get()
-                    .uri("/v8/finance/chart/{symbol}?range=2y&interval=1d", nse(symbol))
+                    .uri("/v8/finance/chart/{symbol}?range={range}&interval={interval}", nse(symbol), range, interval)
                     .retrieve()
                     .body(ChartResponse.class);
         } finally {

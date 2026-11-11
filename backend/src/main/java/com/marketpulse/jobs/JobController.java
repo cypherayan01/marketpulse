@@ -1,6 +1,7 @@
 package com.marketpulse.jobs;
 
 import com.marketpulse.brief.PreMarketBriefService;
+import com.marketpulse.btst.BtstScanService;
 import com.marketpulse.config.MarketPulseProperties;
 import com.marketpulse.news.NewsAlertService;
 import com.marketpulse.news.NewsRunSummary;
@@ -36,17 +37,19 @@ public class JobController {
     private final EodWatchlistService eodWatchlistService;
     private final PreMarketBriefService preMarketBriefService;
     private final PositionalScanService positionalScanService;
+    private final BtstScanService btstScanService;
     private final byte[] jobToken;
     /** Long scans run here so the scheduler's HTTP call returns immediately; one at a time. */
     private final ExecutorService background = Executors.newSingleThreadExecutor();
 
     public JobController(NewsAlertService newsAlertService, EodWatchlistService eodWatchlistService,
                          PreMarketBriefService preMarketBriefService, PositionalScanService positionalScanService,
-                         MarketPulseProperties props) {
+                         BtstScanService btstScanService, MarketPulseProperties props) {
         this.newsAlertService = newsAlertService;
         this.eodWatchlistService = eodWatchlistService;
         this.preMarketBriefService = preMarketBriefService;
         this.positionalScanService = positionalScanService;
+        this.btstScanService = btstScanService;
         this.jobToken = props.jobToken() == null ? new byte[0] : props.jobToken().getBytes(StandardCharsets.UTF_8);
     }
 
@@ -85,6 +88,16 @@ public class JobController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         return runInBackground("Positional scan", positionalScanService::run);
+    }
+
+    /** Around 3:00 PM IST: stocks closing strong enough for an overnight (BTST) hold. */
+    @PostMapping("/btst")
+    public ResponseEntity<Void> runBtst(@RequestHeader(value = "X-Job-Token", required = false) String token,
+                                        @RequestParam(defaultValue = "false") boolean force) {
+        if (!authorized(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return runInBackground("BTST scan", () -> btstScanService.run(force));
     }
 
     private ResponseEntity<Void> runInBackground(String name, Runnable job) {

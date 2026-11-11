@@ -93,4 +93,20 @@ class YahooChartClientTest {
         assertThat(sleeps).hasSize(1);
         assertThat(sleeps.getFirst()).isGreaterThan(Duration.ofMillis(200)).isLessThanOrEqualTo(Duration.ofMillis(300));
     }
+
+    @Test
+    void fetchesTodaysFifteenMinuteBars() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("https://query1.finance.yahoo.com/v8/finance/chart/TCS.NS?range=1d&interval=15m"))
+                .andRespond(withSuccess(new ClassPathResource("yahoo/intraday-sample.json"), MediaType.APPLICATION_JSON));
+
+        List<IntradayCandle> bars = new YahooChartClient(builder, d -> { }, Duration.ZERO).intradayCandles("TCS");
+
+        server.verify();
+        assertThat(bars).hasSize(2); // empty bar skipped
+        assertThat(bars.getFirst().start()).isEqualTo(java.time.Instant.parse("2026-11-11T08:30:00Z")); // 14:00 IST
+        assertThat(bars.getLast().close()).isEqualTo(102.0);
+        assertThat(bars.getLast().volume()).isEqualTo(1500);
+    }
 }

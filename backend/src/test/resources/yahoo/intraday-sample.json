@@ -1,0 +1,1 @@
+{"chart": {"result": [{"meta": {"symbol": "TCS.NS"}, "timestamp": [1794385800, 1794386700, 1794387600], "indicators": {"quote": [{"open": [100.0, null, 101.0], "high": [101.0, null, 102.5], "low": [99.5, null, 100.5], "close": [100.5, null, 102.0], "volume": [1000, null, 1500]}]}}], "error": null}}

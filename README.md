@@ -77,17 +77,36 @@ Swing and positional scorers share `signals.Factors` (points → 0-100 score, wh
 confidence) and return the same `TradeSignal`. Rules are documented on `PositionalScorer` and
 specified by `PositionalScorerTest`. Universe: `marketpulse.positional.universe` (empty = swing's list).
 
+## Phase 5: BTST 3 PM scan (done)
+
+```
+cron-job.org (Mon-Fri 15:00 IST)
+   └─ POST /jobs/btst → 202, runs in background (~40 s: daily + 15-min bars per stock)
+        → skip if no session today unless ?force=true
+        → today's session so far: close location in the day's range, day change, volume projected
+          to a full session, last-hour momentum (15-min bars), 20-day breakout, trend, RSI,
+          strength vs Nifty today, market mood
+        → results due before tomorrow's session (Fri → Mon) rule a stock out entirely
+        → overnight macro events (e.g. Fed decision tonight) flagged at the top
+        → top 3 candidates: tight stop (today's low / 1 ATR), 1.5x target,
+          "exit if it opens below the stop or can't hold today's price in the first 15 minutes"
+```
+
+Rules are documented on `BtstScorer` and specified by `BtstScorerTest`. Yahoo prices can lag a
+few minutes - fine for picking candidates; check the live price in your broker app before buying.
+
 ## Run locally
 
 ```bash
 cd backend
-./mvnw test                                   # 111 tests
+./mvnw test                                   # 138 tests
 ./mvnw -DskipTests package
 JOB_TOKEN=local-test ANTHROPIC_API_KEY=sk-ant-... java -jar target/backend-0.0.1-SNAPSHOT.jar
 curl -X POST -H "X-Job-Token: local-test" localhost:8080/jobs/news
 curl -X POST -H "X-Job-Token: local-test" "localhost:8080/jobs/eod?force=true"        # report appears in the log
 curl -X POST -H "X-Job-Token: local-test" "localhost:8080/jobs/premarket?force=true"  # uses one Opus call
 curl -X POST -H "X-Job-Token: local-test" localhost:8080/jobs/positional
+curl -X POST -H "X-Job-Token: local-test" "localhost:8080/jobs/btst?force=true"
 ```
 
 Without Telegram/email configured, alerts are printed to the log.
@@ -115,8 +134,9 @@ The default sender `onboarding@resend.dev` can only email the address you signed
    - second job: `POST /jobs/eod`, same header, **Mon-Fri 16:30, timezone Asia/Kolkata**
    - third job: `POST /jobs/premarket`, same header, **Mon-Fri 08:30, timezone Asia/Kolkata**
    - fourth job: `POST /jobs/positional`, same header, **Sunday 18:00, timezone Asia/Kolkata**
+   - fifth job: `POST /jobs/btst`, same header, **Mon-Fri 15:00, timezone Asia/Kolkata**
 4. Anthropic Console → set a monthly spend limit.
 
 ## Next phases
 
-5. BTST 3 PM scan · 6. React dashboard on Vercel · 7. Signal tracking / paper trading
+6. React dashboard on Vercel · 7. Signal tracking / paper trading

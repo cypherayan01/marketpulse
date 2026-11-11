@@ -12,11 +12,14 @@ import com.marketpulse.brief.BriefWriter;
 import com.marketpulse.brief.ClaudeBriefWriter;
 import com.marketpulse.brief.CueDefinition;
 import com.marketpulse.brief.PreMarketBriefService;
+import com.marketpulse.btst.BtstCalculator;
+import com.marketpulse.btst.BtstScanService;
+import com.marketpulse.btst.BtstScorer;
+import com.marketpulse.btst.BtstSettings;
 import com.marketpulse.events.EventCalendar;
 import com.marketpulse.events.Impact;
 import com.marketpulse.events.MarketEvent;
 import com.marketpulse.events.Source;
-import com.marketpulse.market.MarketDataClient;
 import com.marketpulse.market.YahooChartClient;
 import com.marketpulse.news.ClaudeNewsImpactAnalyzer;
 import com.marketpulse.news.NewsAlertService;
@@ -95,8 +98,9 @@ public class AppConfig {
         return new EventCalendar(seed);
     }
 
+    /** One Yahoo client for daily and intraday data, so its request spacing covers both. */
     @Bean
-    MarketDataClient marketDataClient() {
+    YahooChartClient yahooChartClient() {
         return new YahooChartClient(restClientBuilder().defaultHeader("User-Agent", USER_AGENT));
     }
 
@@ -153,7 +157,7 @@ public class AppConfig {
     // ---------- Phase 2: swing watchlist ----------
 
     @Bean
-    EodWatchlistService eodWatchlistService(MarketPulseProperties props, MarketDataClient market,
+    EodWatchlistService eodWatchlistService(MarketPulseProperties props, YahooChartClient market,
                                             AlertDispatcher alertDispatcher, EventCalendar calendar, Clock clock) {
         MarketPulseProperties.Swing swing = props.swing();
         log.info("Swing scanner configured with {} stocks", swing.universe().size());
@@ -164,7 +168,7 @@ public class AppConfig {
     // ---------- Phase 3: pre-market brief ----------
 
     @Bean
-    PreMarketBriefService preMarketBriefService(MarketPulseProperties props, MarketDataClient market,
+    PreMarketBriefService preMarketBriefService(MarketPulseProperties props, YahooChartClient market,
                                                 NewsFeeds feeds, NewsRelevanceFilter filter,
                                                 EventCalendar calendar, Claude claude,
                                                 AlertDispatcher alertDispatcher, Clock clock) {
@@ -181,13 +185,23 @@ public class AppConfig {
     // ---------- Phase 4: positional weekly scan ----------
 
     @Bean
-    PositionalScanService positionalScanService(MarketPulseProperties props, MarketDataClient market,
+    PositionalScanService positionalScanService(MarketPulseProperties props, YahooChartClient market,
                                                 AlertDispatcher alertDispatcher, EventCalendar calendar, Clock clock) {
         MarketPulseProperties.Positional positional = props.positional();
         List<String> universe = positional.universe().isEmpty() ? props.swing().universe() : positional.universe();
         return new PositionalScanService(market, new PositionalCalculator(), new PositionalScorer(), alertDispatcher,
                 calendar, clock, new PositionalSettings(universe, props.swing().indexSymbol(), positional.topN(),
                 positional.resultsWarningDays()));
+    }
+
+    // ---------- Phase 5: BTST 3 PM scan ----------
+
+    @Bean
+    BtstScanService btstScanService(MarketPulseProperties props, YahooChartClient yahoo,
+                                    AlertDispatcher alertDispatcher, EventCalendar calendar, Clock clock) {
+        List<String> universe = props.btst().universe().isEmpty() ? props.swing().universe() : props.btst().universe();
+        return new BtstScanService(yahoo, yahoo, new BtstCalculator(), new BtstScorer(), alertDispatcher, calendar,
+                clock, new BtstSettings(universe, props.swing().indexSymbol(), props.btst().topN()));
     }
 
     private static RestClient.Builder restClientBuilder() {

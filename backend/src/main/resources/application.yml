@@ -194,3 +194,7 @@ marketpulse:
     top-n: 5                  # max stocks per list in the Sunday report
     results-warning-days: 14  # suggest waiting for results due within two weeks
     universe: []              # empty = same stocks as swing.universe
+
+  btst:
+    top-n: 3          # BTST is selective - at most 3 candidates
+    universe: []      # empty = same stocks as swing.universe

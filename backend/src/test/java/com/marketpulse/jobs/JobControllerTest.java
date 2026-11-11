@@ -1,6 +1,7 @@
 package com.marketpulse.jobs;
 
 import com.marketpulse.brief.PreMarketBriefService;
+import com.marketpulse.btst.BtstScanService;
 import com.marketpulse.config.MarketPulseProperties;
 import com.marketpulse.news.NewsAlertService;
 import com.marketpulse.news.NewsRunSummary;
@@ -41,6 +42,9 @@ class JobControllerTest {
 
     @MockitoBean
     private PositionalScanService positionalScanService;
+
+    @MockitoBean
+    private BtstScanService btstScanService;
 
     @Test
     void rejectsRequestWithoutToken() throws Exception {
@@ -110,5 +114,18 @@ class JobControllerTest {
                 .andExpect(status().isAccepted());
 
         verify(positionalScanService, timeout(2000)).run();
+    }
+
+    @Test
+    void btstJobRequiresToken() throws Exception {
+        mvc.perform(post("/jobs/btst")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void btstJobIsAcceptedAndRunsInBackground() throws Exception {
+        mvc.perform(post("/jobs/btst").header("X-Job-Token", "test-token"))
+                .andExpect(status().isAccepted());
+
+        verify(btstScanService, timeout(2000)).run(false);
     }
 }
