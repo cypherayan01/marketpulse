@@ -4,6 +4,9 @@ import com.marketpulse.alerts.AlertDispatcher;
 import com.marketpulse.events.EventCalendar;
 import com.marketpulse.events.MarketEvent;
 import com.marketpulse.market.MarketDataClient;
+import com.marketpulse.reports.ReportStore;
+import com.marketpulse.reports.ScanReport;
+import com.marketpulse.signals.TradeStyle;
 import com.marketpulse.signals.TradeSignal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,10 +34,11 @@ public class PositionalScanService {
     private final EventCalendar calendar;
     private final Clock clock;
     private final PositionalSettings settings;
+    private final ReportStore store;
 
     public PositionalScanService(MarketDataClient market, PositionalCalculator calculator, PositionalScorer scorer,
                                  AlertDispatcher dispatcher, EventCalendar calendar, Clock clock,
-                                 PositionalSettings settings) {
+                                 PositionalSettings settings, ReportStore store) {
         this.market = market;
         this.calculator = calculator;
         this.scorer = scorer;
@@ -42,6 +46,7 @@ public class PositionalScanService {
         this.calendar = calendar;
         this.clock = clock;
         this.settings = settings;
+        this.store = store;
     }
 
     public synchronized PositionalRunSummary run() {
@@ -82,6 +87,12 @@ public class PositionalScanService {
                     .ifPresent(e -> resultsSoon.put(s.symbol(), e));
         }
         List<MarketEvent> events = calendar.upcoming(today.plusDays(1), EVENT_DAYS);
+
+        Map<String, LocalDate> resultsDates = new LinkedHashMap<>();
+        resultsSoon.forEach((symbol, event) -> resultsDates.put(symbol, event.date()));
+        store.saveScan(new ScanReport(TradeStyle.POSITIONAL, clock.instant(), index.weekEnding(),
+                PositionalReportFormatter.marketLine(index), bullish, bearish, resultsDates, events, signals.size(),
+                failed, List.of()));
 
         boolean sent = dispatcher.send(
                 PositionalReportFormatter.subject(index.weekEnding(), bullish.size(), bearish.size()),

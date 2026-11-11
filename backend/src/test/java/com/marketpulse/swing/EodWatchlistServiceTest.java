@@ -9,6 +9,8 @@ import com.marketpulse.events.Source;
 import com.marketpulse.market.Candle;
 import com.marketpulse.market.MarketDataClient;
 import com.marketpulse.market.TestCandles;
+import com.marketpulse.reports.ReportStore;
+import com.marketpulse.signals.TradeStyle;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -30,6 +32,7 @@ class EodWatchlistServiceTest {
 
     private final FakeMarketData market = new FakeMarketData();
     private EventCalendar calendar = new EventCalendar(List.of());
+    private final ReportStore store = new ReportStore(100);
     private final List<String> subjects = new ArrayList<>();
     private final List<String> bodies = new ArrayList<>();
     private final Notifier notifier = (subject, body) -> { subjects.add(subject); bodies.add(body); };
@@ -48,6 +51,24 @@ class EodWatchlistServiceTest {
         assertThat(body).contains("UPCO").contains("Stop").contains("Target");
         assertThat(body.indexOf("UPCO")).isLessThan(body.indexOf("DOWNCO"));
         assertThat(body).contains("Not investment advice");
+    }
+
+    @Test
+    void savesTheReportForTheDashboard() {
+        market.put("^NSEI", TestCandles.trend(400, 20000, 0.0005, 0, TODAY));
+        market.put("UPCO", TestCandles.trend(400, 100, 0.004, 1_000, TODAY));
+        market.put("DOWNCO", TestCandles.trend(400, 100, -0.004, 1_000, TODAY));
+        calendar = new EventCalendar(List.of(MarketEvent.results(TODAY.plusDays(6), "UPCO", Source.CONFIG)));
+
+        service(List.of("UPCO", "DOWNCO"), 5).run(false);
+
+        var report = store.latestScan(TradeStyle.SWING).orElseThrow();
+        assertThat(report.session()).isEqualTo(TODAY);
+        assertThat(report.market()).startsWith("Nifty");
+        assertThat(report.bullish()).extracting(s -> s.symbol()).containsExactly("UPCO");
+        assertThat(report.bearish()).extracting(s -> s.symbol()).containsExactly("DOWNCO");
+        assertThat(report.resultsSoon()).containsEntry("UPCO", TODAY.plusDays(6));
+        assertThat(report.scanned()).isEqualTo(2);
     }
 
     @Test
@@ -121,7 +142,7 @@ class EodWatchlistServiceTest {
 
     private EodWatchlistService service(List<String> universe, int topN) {
         return new EodWatchlistService(market, new IndicatorCalculator(), new SwingScorer(),
-                new AlertDispatcher(List.of(notifier)), calendar, clock, new SwingSettings(universe, "^NSEI", topN, 15));
+                new AlertDispatcher(List.of(notifier)), calendar, clock, new SwingSettings(universe, "^NSEI", topN, 15), store);
     }
 
     private static class FakeMarketData implements MarketDataClient {

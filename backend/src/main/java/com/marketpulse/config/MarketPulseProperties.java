@@ -18,7 +18,8 @@ public record MarketPulseProperties(
         @DefaultValue Events events,
         @DefaultValue Brief brief,
         @DefaultValue Positional positional,
-        @DefaultValue Btst btst) {
+        @DefaultValue Btst btst,
+        @DefaultValue Dashboard dashboard) {
 
     public record News(
             @DefaultValue List<Feed> feeds,
@@ -59,6 +60,13 @@ public record MarketPulseProperties(
     }
 
     public record Cue(String name, String symbol) {
+    }
+
+    /**
+     * @param token          secret the React dashboard sends as "Authorization: Bearer ..."; dashboard API is off without it
+     * @param allowedOrigins sites allowed to call /api/** from a browser (your Vercel URL)
+     */
+    public record Dashboard(String token, @DefaultValue("http://localhost:5173") List<String> allowedOrigins) {
     }
 
     /** @param universe stocks to scan; empty means "same as swing.universe" */

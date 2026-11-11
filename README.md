@@ -95,11 +95,30 @@ cron-job.org (Mon-Fri 15:00 IST)
 Rules are documented on `BtstScorer` and specified by `BtstScorerTest`. Yahoo prices can lag a
 few minutes - fine for picking candidates; check the live price in your broker app before buying.
 
+## Phase 6: React dashboard (done)
+
+```
+frontend/ (React 19 + TypeScript + Vite, deployed on Vercel)
+   └─ GET  /api/dashboard   Authorization: Bearer <DASHBOARD_TOKEN>
+   └─ POST /api/run/{news|premarket|eod|positional|btst}   start a job from the UI
+backend: every job saves its latest output in ReportStore (in memory) → one JSON response
+```
+
+- Tabs: Overview (brief + latest picks + recent alerts), Swing, Positional, BTST, News, Events.
+- Signal cards: score, plan (entry / stop / target), why, ⚠️ watch-outs, results warning, invalidation.
+- `DASHBOARD_TOKEN` is separate from `JOB_TOKEN`; CORS allows only `DASHBOARD_ORIGINS`.
+- After a Render restart the store is empty until jobs run - each tab offers "Run … scan now"
+  (it behaves like the scheduled run, so it also sends the report to Telegram/email).
+- While Render wakes up (~1 min) the UI shows "Waking up the server…" and keeps retrying.
+
+See `frontend/README.md` for local dev and Vercel deployment.
+
 ## Run locally
 
 ```bash
 cd backend
-./mvnw test                                   # 138 tests
+./mvnw test                                   # 152 tests
+# dashboard API: also set DASHBOARD_TOKEN=... (and DASHBOARD_ORIGINS for a non-local frontend)
 ./mvnw -DskipTests package
 JOB_TOKEN=local-test ANTHROPIC_API_KEY=sk-ant-... java -jar target/backend-0.0.1-SNAPSHOT.jar
 curl -X POST -H "X-Job-Token: local-test" localhost:8080/jobs/news
@@ -136,7 +155,9 @@ The default sender `onboarding@resend.dev` can only email the address you signed
    - fourth job: `POST /jobs/positional`, same header, **Sunday 18:00, timezone Asia/Kolkata**
    - fifth job: `POST /jobs/btst`, same header, **Mon-Fri 15:00, timezone Asia/Kolkata**
 4. Anthropic Console → set a monthly spend limit.
+5. Vercel → import the repo with Root Directory `frontend`, set `VITE_API_BASE_URL` to the Render URL,
+   then put the Vercel URL in Render's `DASHBOARD_ORIGINS`.
 
 ## Next phases
 
-6. React dashboard on Vercel · 7. Signal tracking / paper trading
+7. Signal tracking / paper trading · holdings health check

@@ -7,6 +7,9 @@ import com.marketpulse.events.EventCalendar;
 import com.marketpulse.events.MarketEvent;
 import com.marketpulse.market.Candle;
 import com.marketpulse.market.MarketDataClient;
+import com.marketpulse.reports.ReportStore;
+import com.marketpulse.reports.ScanReport;
+import com.marketpulse.signals.TradeStyle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,10 +39,11 @@ public class EodWatchlistService {
     private final EventCalendar calendar;
     private final Clock clock;
     private final SwingSettings settings;
+    private final ReportStore store;
 
     public EodWatchlistService(MarketDataClient market, IndicatorCalculator calculator, SwingScorer scorer,
                                AlertDispatcher dispatcher, EventCalendar calendar, Clock clock,
-                               SwingSettings settings) {
+                               SwingSettings settings, ReportStore store) {
         this.market = market;
         this.calculator = calculator;
         this.scorer = scorer;
@@ -47,6 +51,7 @@ public class EodWatchlistService {
         this.calendar = calendar;
         this.clock = clock;
         this.settings = settings;
+        this.store = store;
     }
 
     /** @param force run even if there was no trading session today (useful for testing on weekends) */
@@ -97,6 +102,11 @@ public class EodWatchlistService {
         List<MarketEvent> events = calendar.upcoming(today.plusDays(1), EVENT_DAYS);
 
         MarketContext context = MarketContext.of(index, indexSnapshot);
+        Map<String, LocalDate> resultsDates = new LinkedHashMap<>();
+        resultsSoon.forEach((symbol, event) -> resultsDates.put(symbol, event.date()));
+        store.saveScan(new ScanReport(TradeStyle.SWING, clock.instant(), lastSession,
+                SwingReportFormatter.marketLine(context), bullish, bearish, resultsDates, events, signals.size(),
+                failed, List.of()));
         boolean sent = dispatcher.send(
                 SwingReportFormatter.subject(lastSession, bullish.size(), bearish.size()),
                 SwingReportFormatter.body(context, bullish, bearish, resultsSoon, events, today, signals.size(), failed));

@@ -8,6 +8,8 @@ import com.marketpulse.events.Source;
 import com.marketpulse.market.Candle;
 import com.marketpulse.market.MarketDataClient;
 import com.marketpulse.market.TestCandles;
+import com.marketpulse.reports.ReportStore;
+import com.marketpulse.signals.TradeStyle;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -37,6 +39,7 @@ class PositionalScanServiceTest {
     private final List<String> bodies = new ArrayList<>();
     private final AlertDispatcher dispatcher = new AlertDispatcher(List.of((s, b) -> { subjects.add(s); bodies.add(b); }));
     private EventCalendar calendar = new EventCalendar(List.of());
+    private final ReportStore store = new ReportStore(100);
 
     @Test
     void ranksLongTermSetupsAndStocksToAvoid() {
@@ -91,6 +94,19 @@ class PositionalScanServiceTest {
     }
 
     @Test
+    void savesTheReportForTheDashboard() {
+        data.put("^NSEI", TestCandles.trend(600, 20000, 0.0003, 0, FRIDAY));
+        data.put("LEADER", TestCandles.trend(600, 100, 0.002, 1_000, FRIDAY));
+
+        service(List.of("LEADER"), 5).run();
+
+        var report = store.latestScan(TradeStyle.POSITIONAL).orElseThrow();
+        assertThat(report.session()).isEqualTo(FRIDAY);
+        assertThat(report.bullish()).extracting(s -> s.symbol()).containsExactly("LEADER");
+        assertThat(report.market()).contains("40-week");
+    }
+
+    @Test
     void indexUnavailableMeansNoReport() {
         PositionalRunSummary summary = service(List.of("LEADER"), 5).run();
 
@@ -100,6 +116,6 @@ class PositionalScanServiceTest {
 
     private PositionalScanService service(List<String> universe, int topN) {
         return new PositionalScanService(market, new PositionalCalculator(), new PositionalScorer(), dispatcher,
-                calendar, clock, new PositionalSettings(universe, "^NSEI", topN, 14));
+                calendar, clock, new PositionalSettings(universe, "^NSEI", topN, 14), store);
     }
 }

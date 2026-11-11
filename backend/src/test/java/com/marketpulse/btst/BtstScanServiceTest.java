@@ -10,6 +10,8 @@ import com.marketpulse.market.IntradayCandle;
 import com.marketpulse.market.IntradayDataClient;
 import com.marketpulse.market.MarketDataClient;
 import com.marketpulse.market.TestCandles;
+import com.marketpulse.reports.ReportStore;
+import com.marketpulse.signals.TradeStyle;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -40,6 +42,7 @@ class BtstScanServiceTest {
     private final List<String> bodies = new ArrayList<>();
     private final AlertDispatcher dispatcher = new AlertDispatcher(List.of((s, b) -> { subjects.add(s); bodies.add(b); }));
     private EventCalendar calendar = new EventCalendar(List.of());
+    private final ReportStore store = new ReportStore(100);
     private Clock clock = at(WEDNESDAY);
 
     @Test
@@ -101,6 +104,23 @@ class BtstScanServiceTest {
     }
 
     @Test
+    void savesCandidatesAndWarningsForTheDashboard() {
+        nifty(WEDNESDAY, 0.005);
+        strong("RISER", WEDNESDAY);
+        strong("REPORTER", WEDNESDAY);
+        calendar = new EventCalendar(List.of(
+                MarketEvent.macro(WEDNESDAY, "US Fed rate decision", Impact.HIGH),
+                MarketEvent.results(WEDNESDAY.plusDays(1), "REPORTER", Source.CONFIG)));
+
+        service(List.of("RISER", "REPORTER")).run(false);
+
+        var report = store.latestScan(TradeStyle.BTST).orElseThrow();
+        assertThat(report.bullish()).extracting(s -> s.symbol()).containsExactly("RISER");
+        assertThat(report.notes()).anyMatch(n -> n.contains("US Fed rate decision"))
+                .anyMatch(n -> n.contains("Results due: REPORTER"));
+    }
+
+    @Test
     void failingSymbolDoesNotStopTheScan() {
         nifty(WEDNESDAY, 0.005);
         strong("RISER", WEDNESDAY);
@@ -123,7 +143,7 @@ class BtstScanServiceTest {
 
     private BtstScanService service(List<String> universe) {
         return new BtstScanService(dailyClient, intradayClient, new BtstCalculator(), new BtstScorer(), dispatcher,
-                calendar, clock, new BtstSettings(universe, "^NSEI", 5));
+                calendar, clock, new BtstSettings(universe, "^NSEI", 5), store);
     }
 
     private static Clock at(LocalDate day) {

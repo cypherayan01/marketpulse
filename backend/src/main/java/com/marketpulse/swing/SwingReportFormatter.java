@@ -33,7 +33,7 @@ final class SwingReportFormatter {
                        Map<String, MarketEvent> resultsSoon, List<MarketEvent> events, LocalDate today,
                        int scanned, List<String> failed) {
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format(Locale.ENGLISH, "Market: Nifty %,.2f (%+.2f%% today) · %s%n%n", market.close(), market.dayChangePct(), marketMood(market)));
+        sb.append("Market: ").append(marketLine(market)).append("\n\n");
 
         sb.append("🟢 BULLISH SETUPS (swing, hold ~3-20 days)\n");
         if (bullish.isEmpty()) {
@@ -82,6 +82,11 @@ final class SwingReportFormatter {
         sb.append("\n\nRule-based signals, not predictions. Check upcoming results dates and news before buying. "
                 + "Not investment advice.");
         return sb.toString();
+    }
+
+    static String marketLine(EodWatchlistService.MarketContext market) {
+        return String.format(Locale.ENGLISH, "Nifty %,.2f (%+.2f%% today) · %s",
+                market.close(), market.dayChangePct(), marketMood(market));
     }
 
     private static String marketMood(EodWatchlistService.MarketContext m) {

@@ -8,6 +8,8 @@ import com.marketpulse.market.MarketDataClient;
 import com.marketpulse.news.NewsItem;
 import com.marketpulse.news.NewsRelevanceFilter;
 import com.marketpulse.news.NewsSource;
+import com.marketpulse.reports.BriefReport;
+import com.marketpulse.reports.ReportStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,10 +44,12 @@ public class PreMarketBriefService {
     private final AlertDispatcher dispatcher;
     private final Clock clock;
     private final BriefSettings settings;
+    private final ReportStore store;
 
     public PreMarketBriefService(MarketDataClient market, List<CueDefinition> cues, List<NewsSource> sources,
                                  NewsRelevanceFilter filter, EventCalendar calendar, BriefWriter writer,
-                                 AlertDispatcher dispatcher, Clock clock, BriefSettings settings) {
+                                 AlertDispatcher dispatcher, Clock clock, BriefSettings settings,
+                                 ReportStore store) {
         this.market = market;
         this.cues = cues;
         this.sources = sources;
@@ -55,6 +59,7 @@ public class PreMarketBriefService {
         this.dispatcher = dispatcher;
         this.clock = clock;
         this.settings = settings;
+        this.store = store;
     }
 
     public synchronized BriefRunSummary run(boolean force) {
@@ -90,6 +95,7 @@ public class PreMarketBriefService {
             text = "(AI summary unavailable this morning - numbers below.)";
             aiWritten = false;
         }
+        store.saveBrief(new BriefReport(clock.instant(), today, text.strip(), aiWritten, readings, missing));
         String body = text.strip() + "\n\n" + BriefFormatter.cueTable(readings, missing) + BriefFormatter.footer();
         boolean sent = dispatcher.send(BriefFormatter.subject(today), body);
 

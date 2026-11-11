@@ -7,6 +7,9 @@ import com.marketpulse.events.MarketEvent;
 import com.marketpulse.market.Candle;
 import com.marketpulse.market.IntradayDataClient;
 import com.marketpulse.market.MarketDataClient;
+import com.marketpulse.reports.ReportStore;
+import com.marketpulse.reports.ScanReport;
+import com.marketpulse.signals.TradeStyle;
 import com.marketpulse.signals.TradeSignal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /** ~3 PM IST: find stocks closing strong enough to hold overnight. */
 public class BtstScanService {
@@ -41,10 +45,11 @@ public class BtstScanService {
     private final EventCalendar calendar;
     private final Clock clock;
     private final BtstSettings settings;
+    private final ReportStore store;
 
     public BtstScanService(MarketDataClient dailyData, IntradayDataClient intradayData, BtstCalculator calculator,
                            BtstScorer scorer, AlertDispatcher dispatcher, EventCalendar calendar, Clock clock,
-                           BtstSettings settings) {
+                           BtstSettings settings, ReportStore store) {
         this.dailyData = dailyData;
         this.intradayData = intradayData;
         this.calculator = calculator;
@@ -53,6 +58,7 @@ public class BtstScanService {
         this.calendar = calendar;
         this.clock = clock;
         this.settings = settings;
+        this.store = store;
     }
 
     /** @param force run even without a session today (testing) */
@@ -101,6 +107,15 @@ public class BtstScanService {
                 .sorted(Comparator.comparingInt(TradeSignal::score).reversed())
                 .limit(settings.topN())
                 .toList();
+
+        List<String> notes = new ArrayList<>();
+        overnight.forEach(e -> notes.add("Overnight event risk: " + e.title()));
+        if (!resultsDue.isEmpty()) {
+            notes.add("Excluded - Results due: " + String.join(", ", resultsDue));
+        }
+        store.saveScan(new ScanReport(TradeStyle.BTST, clock.instant(), today,
+                String.format(Locale.ENGLISH, "Nifty %+.2f%% today", niftyChange), candidates, List.of(), Map.of(),
+                overnight, signals.size(), failed, notes));
 
         boolean sent = dispatcher.send(BtstReportFormatter.subject(today, candidates.size()),
                 BtstReportFormatter.body(niftyChange, candidates, overnight, resultsDue, signals.size(), failed));

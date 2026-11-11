@@ -32,8 +32,7 @@ final class PositionalReportFormatter {
                        Map<String, MarketEvent> resultsSoon, List<MarketEvent> events, LocalDate today,
                        int scanned, List<String> failed) {
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format(Locale.ENGLISH, "Market: Nifty %,.2f (%+.1f%% over 6 months) · %s%n%n",
-                index.close(), index.return6m() * 100, marketMood(index)));
+        sb.append("Market: ").append(marketLine(index)).append("\n\n");
 
         sb.append("🟢 POSITIONAL SETUPS (weekly chart, hold ~1-6 months)\n");
         if (bullish.isEmpty()) {
@@ -83,6 +82,11 @@ final class PositionalReportFormatter {
         sb.append("\n\nRule-based signals on weekly candles, not predictions. Review fundamentals and results "
                 + "dates before investing. Not investment advice.");
         return sb.toString();
+    }
+
+    static String marketLine(PositionalSnapshot index) {
+        return String.format(Locale.ENGLISH, "Nifty %,.2f (%+.1f%% over 6 months) · %s",
+                index.close(), index.return6m() * 100, marketMood(index));
     }
 
     private static String marketMood(PositionalSnapshot nifty) {

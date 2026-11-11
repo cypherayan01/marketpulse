@@ -9,6 +9,7 @@ import com.marketpulse.market.MarketDataClient;
 import com.marketpulse.news.NewsItem;
 import com.marketpulse.news.NewsRelevanceFilter;
 import com.marketpulse.news.NewsSource;
+import com.marketpulse.reports.ReportStore;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -46,6 +47,7 @@ class PreMarketBriefServiceTest {
     private final List<String> bodies = new ArrayList<>();
     private final AlertDispatcher dispatcher = new AlertDispatcher(List.of((s, b) -> { subjects.add(s); bodies.add(b); }));
     private EventCalendar calendar = new EventCalendar(List.of());
+    private final ReportStore store = new ReportStore(100);
     private Set<LocalDate> holidays = Set.of();
     private BriefInput captured;
     private BriefWriter writer = input -> { captured = input; return "AI: markets look calm."; };
@@ -66,6 +68,20 @@ class PreMarketBriefServiceTest {
         assertThat(subjects.getFirst()).contains("Pre-market brief").contains("11 Nov 2026");
         assertThat(bodies.getFirst()).startsWith("AI: markets look calm.")
                 .contains("S&P 500").contains("+1.00%").contains("-2.50%");
+    }
+
+    @Test
+    void savesTheBriefForTheDashboard() {
+        data.put("^GSPC", closes(100, 101));
+        data.put("BZ=F", closes(80, 78));
+
+        service(at(WEDNESDAY, 8, 30)).run(false);
+
+        var brief = store.latestBrief().orElseThrow();
+        assertThat(brief.date()).isEqualTo(WEDNESDAY);
+        assertThat(brief.text()).isEqualTo("AI: markets look calm.");
+        assertThat(brief.aiWritten()).isTrue();
+        assertThat(brief.cues()).extracting(CueReading::name).containsExactly("S&P 500", "Brent crude");
     }
 
     @Test
@@ -147,7 +163,7 @@ class PreMarketBriefServiceTest {
 
     private PreMarketBriefService service(Clock clock) {
         return new PreMarketBriefService(market, cues, List.of(source), filter, calendar, writer, dispatcher, clock,
-                new BriefSettings(holidays, 40, 3));
+                new BriefSettings(holidays, 40, 3), store);
     }
 
     private static Clock at(LocalDate date, int hour, int minute) {

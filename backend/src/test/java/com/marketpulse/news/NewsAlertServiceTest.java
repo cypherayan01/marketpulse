@@ -3,6 +3,8 @@ package com.marketpulse.news;
 import com.marketpulse.alerts.AlertDispatcher;
 import com.marketpulse.alerts.Notifier;
 import com.marketpulse.events.EventCalendar;
+import com.marketpulse.reports.NewsEntry;
+import com.marketpulse.reports.ReportStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -28,6 +30,7 @@ class NewsAlertServiceTest {
     private RecordingNotifier notifier;
     private SeenNewsRegistry seen;
     private EventCalendar calendar;
+    private ReportStore store;
 
     @BeforeEach
     void setUp() {
@@ -35,6 +38,7 @@ class NewsAlertServiceTest {
         notifier = new RecordingNotifier();
         seen = new SeenNewsRegistry(1000);
         calendar = new EventCalendar(List.of());
+        store = new ReportStore(100);
     }
 
     @Test
@@ -53,6 +57,22 @@ class NewsAlertServiceTest {
         assertThat(analyzer.analyzedTitles).containsExactlyInAnyOrder(
                 "RBI cuts repo rate unexpectedly", "Crude oil inches up 0.2%");
         assertThat(summary).isEqualTo(new NewsRunSummary(3, 3, 2, 1));
+    }
+
+    @Test
+    void savesEveryScoredHeadlineForTheDashboard() {
+        NewsSource source = () -> List.of(
+                news("1", "RBI cuts repo rate unexpectedly", minutesAgo(5)),
+                news("2", "Crude oil inches up 0.2%", minutesAgo(10)));
+        analyzer.score("RBI cuts repo rate unexpectedly", 9);
+        analyzer.score("Crude oil inches up 0.2%", 3);
+
+        service(source).run();
+
+        assertThat(store.recentNews()).extracting(NewsEntry::title, NewsEntry::alerted)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.groups.Tuple.tuple("RBI cuts repo rate unexpectedly", true),
+                        org.assertj.core.groups.Tuple.tuple("Crude oil inches up 0.2%", false));
     }
 
     @Test
@@ -134,7 +154,7 @@ class NewsAlertServiceTest {
                 news("3", "RBI three", minutesAgo(1)));
 
         new NewsAlertService(List.of(source), filter, seen, analyzer,
-                new AlertDispatcher(List.of(notifier)), calendar, clock, smallBatches).run();
+                new AlertDispatcher(List.of(notifier)), calendar, clock, smallBatches, store).run();
 
         assertThat(analyzer.calls).isEqualTo(2);
         assertThat(analyzer.analyzedTitles).hasSize(3);
@@ -157,7 +177,7 @@ class NewsAlertServiceTest {
 
     private NewsAlertService service(NewsSource... sources) {
         return new NewsAlertService(List.of(sources), filter, seen, analyzer,
-                new AlertDispatcher(List.of(notifier)), calendar, clock, settings);
+                new AlertDispatcher(List.of(notifier)), calendar, clock, settings, store);
     }
 
     private static Instant minutesAgo(int minutes) {

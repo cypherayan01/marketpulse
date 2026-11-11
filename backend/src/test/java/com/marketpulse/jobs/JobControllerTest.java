@@ -24,6 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(JobController.class)
+@org.springframework.context.annotation.Import(BackgroundJobs.class)
 @EnableConfigurationProperties(MarketPulseProperties.class)
 @TestPropertySource(properties = "marketpulse.job-token=test-token")
 class JobControllerTest {

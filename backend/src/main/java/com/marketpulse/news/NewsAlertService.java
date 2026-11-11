@@ -4,6 +4,7 @@ import com.marketpulse.alerts.AlertDispatcher;
 import com.marketpulse.events.EventCalendar;
 import com.marketpulse.events.MarketEvent;
 import com.marketpulse.events.Source;
+import com.marketpulse.reports.ReportStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,10 +31,11 @@ public class NewsAlertService {
     private final EventCalendar calendar;
     private final Clock clock;
     private final NewsAlertSettings settings;
+    private final ReportStore store;
 
     public NewsAlertService(List<NewsSource> sources, NewsRelevanceFilter filter, SeenNewsRegistry seen,
                             NewsImpactAnalyzer analyzer, AlertDispatcher dispatcher, EventCalendar calendar,
-                            Clock clock, NewsAlertSettings settings) {
+                            Clock clock, NewsAlertSettings settings, ReportStore store) {
         this.sources = sources;
         this.filter = filter;
         this.seen = seen;
@@ -42,6 +44,7 @@ public class NewsAlertService {
         this.calendar = calendar;
         this.clock = clock;
         this.settings = settings;
+        this.store = store;
     }
 
     public synchronized NewsRunSummary run() {
@@ -104,9 +107,11 @@ public class NewsAlertService {
                 log.info("Results date from news: {} on {}", impact.results().symbol(), impact.results().date());
                 calendar.add(MarketEvent.results(impact.results().date(), impact.results().symbol(), Source.NEWS));
             }
-            if (impact.impactScore() >= settings.impactThreshold() && dispatcher.dispatch(impact)) {
+            boolean sent = impact.impactScore() >= settings.impactThreshold() && dispatcher.dispatch(impact);
+            if (sent) {
                 alerted++;
             }
+            store.addNews(impact, sent, clock.instant());
         }
         return alerted;
     }

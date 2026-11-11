@@ -15,6 +15,11 @@ marketpulse:
   # Shared secret the external scheduler sends in the X-Job-Token header. Required - jobs are rejected without it.
   job-token: ${JOB_TOKEN:}
 
+  # React dashboard API (/api/**). Separate secret from the job token; the API is off until it's set.
+  dashboard:
+    token: ${DASHBOARD_TOKEN:}
+    allowed-origins: ${DASHBOARD_ORIGINS:http://localhost:5173}   # comma-separated, e.g. https://marketpulse-xyz.vercel.app
+
   claude:
     api-key: ${ANTHROPIC_API_KEY:}
     triage-model: claude-haiku-5-5    # cheap, high-volume headline triage

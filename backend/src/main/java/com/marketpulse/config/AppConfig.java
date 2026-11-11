@@ -33,6 +33,7 @@ import com.marketpulse.positional.PositionalCalculator;
 import com.marketpulse.positional.PositionalScanService;
 import com.marketpulse.positional.PositionalScorer;
 import com.marketpulse.positional.PositionalSettings;
+import com.marketpulse.reports.ReportStore;
 import com.marketpulse.swing.EodWatchlistService;
 import com.marketpulse.swing.IndicatorCalculator;
 import com.marketpulse.swing.SwingScorer;
@@ -64,6 +65,11 @@ public class AppConfig {
     @Bean
     Clock clock() {
         return Clock.systemUTC();
+    }
+
+    @Bean
+    ReportStore reportStore() {
+        return new ReportStore(200);
     }
 
     /** Holder beans: Spring treats List<T> and Optional<T> injection points specially, so wrap them. */
@@ -147,22 +153,24 @@ public class AppConfig {
     @Bean
     NewsAlertService newsAlertService(MarketPulseProperties props, NewsFeeds feeds,
                                       NewsRelevanceFilter filter, NewsImpactAnalyzer analyzer,
-                                      AlertDispatcher alertDispatcher, EventCalendar calendar, Clock clock) {
+                                      AlertDispatcher alertDispatcher, EventCalendar calendar, Clock clock,
+                                      ReportStore store) {
         MarketPulseProperties.News news = props.news();
         log.info("News alerter configured with {} feeds, threshold {}/10", feeds.sources().size(), news.impactThreshold());
         return new NewsAlertService(feeds.sources(), filter, new SeenNewsRegistry(5_000), analyzer, alertDispatcher,
-                calendar, clock, new NewsAlertSettings(news.lookback(), news.impactThreshold(), news.batchSize()));
+                calendar, clock, new NewsAlertSettings(news.lookback(), news.impactThreshold(), news.batchSize()), store);
     }
 
     // ---------- Phase 2: swing watchlist ----------
 
     @Bean
     EodWatchlistService eodWatchlistService(MarketPulseProperties props, YahooChartClient market,
-                                            AlertDispatcher alertDispatcher, EventCalendar calendar, Clock clock) {
+                                            AlertDispatcher alertDispatcher, EventCalendar calendar, Clock clock,
+                                            ReportStore store) {
         MarketPulseProperties.Swing swing = props.swing();
         log.info("Swing scanner configured with {} stocks", swing.universe().size());
         return new EodWatchlistService(market, new IndicatorCalculator(), new SwingScorer(), alertDispatcher, calendar,
-                clock, new SwingSettings(swing.universe(), swing.indexSymbol(), swing.topN(), swing.resultsWarningDays()));
+                clock, new SwingSettings(swing.universe(), swing.indexSymbol(), swing.topN(), swing.resultsWarningDays()), store);
     }
 
     // ---------- Phase 3: pre-market brief ----------
@@ -171,7 +179,7 @@ public class AppConfig {
     PreMarketBriefService preMarketBriefService(MarketPulseProperties props, YahooChartClient market,
                                                 NewsFeeds feeds, NewsRelevanceFilter filter,
                                                 EventCalendar calendar, Claude claude,
-                                                AlertDispatcher alertDispatcher, Clock clock) {
+                                                AlertDispatcher alertDispatcher, Clock clock, ReportStore store) {
         MarketPulseProperties.Brief brief = props.brief();
         BriefWriter writer = claude.client().<BriefWriter>map(c -> new ClaudeBriefWriter(c, props.claude().briefModel()))
                 .orElse(input -> {
@@ -179,29 +187,31 @@ public class AppConfig {
                 });
         List<CueDefinition> cues = brief.cues().stream().map(c -> new CueDefinition(c.name(), c.symbol())).toList();
         return new PreMarketBriefService(market, cues, feeds.sources(), filter, calendar, writer, alertDispatcher, clock,
-                new BriefSettings(new HashSet<>(props.events().holidays()), brief.maxHeadlines(), brief.eventDays()));
+                new BriefSettings(new HashSet<>(props.events().holidays()), brief.maxHeadlines(), brief.eventDays()), store);
     }
 
     // ---------- Phase 4: positional weekly scan ----------
 
     @Bean
     PositionalScanService positionalScanService(MarketPulseProperties props, YahooChartClient market,
-                                                AlertDispatcher alertDispatcher, EventCalendar calendar, Clock clock) {
+                                                AlertDispatcher alertDispatcher, EventCalendar calendar, Clock clock,
+                                                ReportStore store) {
         MarketPulseProperties.Positional positional = props.positional();
         List<String> universe = positional.universe().isEmpty() ? props.swing().universe() : positional.universe();
         return new PositionalScanService(market, new PositionalCalculator(), new PositionalScorer(), alertDispatcher,
                 calendar, clock, new PositionalSettings(universe, props.swing().indexSymbol(), positional.topN(),
-                positional.resultsWarningDays()));
+                positional.resultsWarningDays()), store);
     }
 
     // ---------- Phase 5: BTST 3 PM scan ----------
 
     @Bean
     BtstScanService btstScanService(MarketPulseProperties props, YahooChartClient yahoo,
-                                    AlertDispatcher alertDispatcher, EventCalendar calendar, Clock clock) {
+                                    AlertDispatcher alertDispatcher, EventCalendar calendar, Clock clock,
+                                    ReportStore store) {
         List<String> universe = props.btst().universe().isEmpty() ? props.swing().universe() : props.btst().universe();
         return new BtstScanService(yahoo, yahoo, new BtstCalculator(), new BtstScorer(), alertDispatcher, calendar,
-                clock, new BtstSettings(universe, props.swing().indexSymbol(), props.btst().topN()));
+                clock, new BtstSettings(universe, props.swing().indexSymbol(), props.btst().topN()), store);
     }
 
     private static RestClient.Builder restClientBuilder() {
