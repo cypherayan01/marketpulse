@@ -128,6 +128,33 @@ class SwingScorerTest {
     }
 
     @Test
+    void closeBarelyAboveTheLevelIsNotABreakout() {
+        SnapshotBuilder b = SnapshotBuilder.bullishBreakout();
+        b.close = 108.3; // only 0.28% above the 20-day high of 108 - inside the 0.5% buffer
+
+        TradeSignal signal = scorer.score(b.build(), NIFTY_3M);
+
+        assertThat(signal.bullishFactors()).noneMatch(r -> r.contains("20-day high"));
+        assertThat(signal.invalidation()).contains("stop loss"); // not "failed breakout"
+    }
+
+    @Test
+    void closeClearlyAboveTheLevelIsABreakout() {
+        SnapshotBuilder b = SnapshotBuilder.bullishBreakout();
+        b.close = 108.6; // 0.56% above 108
+
+        assertThat(scorer.score(b.build(), NIFTY_3M).bullishFactors()).anyMatch(r -> r.contains("20-day high"));
+    }
+
+    @Test
+    void closeBarelyBelowTheLowIsNotABreakdown() {
+        SnapshotBuilder b = SnapshotBuilder.bearishBreakdown();
+        b.close = 81.8; // 0.24% below the 20-day low of 82
+
+        assertThat(scorer.score(b.build(), NIFTY_3M).bearishFactors()).noneMatch(r -> r.contains("20-day low"));
+    }
+
+    @Test
     void separatesSupportingAndOpposingFactors() {
         TradeSignal signal = scorer.score(SnapshotBuilder.bearishBreakdown().build(), NIFTY_3M);
 

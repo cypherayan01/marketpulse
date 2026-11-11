@@ -17,6 +17,7 @@ import static com.marketpulse.signals.Money.rupees;
  * Trend      close vs 200 EMA ±10 · 20 EMA vs 50 EMA ±8 · close vs 20 EMA ±5
  * Momentum   MACD vs signal ±6 · fresh MACD crossover ±4 · RSI zone -6..+6
  * Price      20-day breakout/breakdown ±10, +-5 more on >= 1.5x volume · within 5% of 52-week high +4
+ *            (the close must clear the level by 0.5% to count - marginal pokes are often false breakouts)
  * Strength   3-month return vs Nifty beyond ±5 points: ±8
  * </pre>
  * Net points are scaled so only a perfect bullish setup scores 100 and only a perfect breakdown scores 0.
@@ -24,6 +25,7 @@ import static com.marketpulse.signals.Money.rupees;
 public class SwingScorer {
 
     private static final double VOLUME_CONFIRMATION = 1.5;
+    static final double BREAKOUT_BUFFER = 0.005;
     private static final double RELATIVE_STRENGTH_EDGE = 0.05;
     private static final int RELIABLE_HISTORY = 200;
     /** Most points the rules can add: trend 23 + MACD 10 + RSI 6 + breakout 15 + 52-week high 4 + strength 8. */
@@ -51,12 +53,14 @@ public class SwingScorer {
         // Price action
         double volumeRatio = s.avgVolume20() > 0 ? s.volume() / s.avgVolume20() : 0;
         boolean volumeConfirmed = volumeRatio >= VOLUME_CONFIRMATION;
-        if (s.close() > s.prior20High()) {
+        boolean brokeOut = s.close() > s.prior20High() * (1 + BREAKOUT_BUFFER);
+        boolean brokeDown = s.close() < s.prior20Low() * (1 - BREAKOUT_BUFFER);
+        if (brokeOut) {
             f.add(10, "Broke above 20-day high (%s)".formatted(rupees(s.prior20High())));
             if (volumeConfirmed) {
                 f.add(5, String.format(Locale.ROOT, "Breakout on %.1fx average volume", volumeRatio));
             }
-        } else if (s.close() < s.prior20Low()) {
+        } else if (brokeDown) {
             f.add(-10, "Broke below 20-day low (%s)".formatted(rupees(s.prior20Low())));
             if (volumeConfirmed) {
                 f.add(-5, String.format(Locale.ROOT, "Breakdown on %.1fx average volume", volumeRatio));
@@ -80,7 +84,7 @@ public class SwingScorer {
         String invalidation = null;
         if (classification.bullish()) {
             plan = plan(s);
-            invalidation = s.close() > s.prior20High()
+            invalidation = brokeOut
                     ? "Daily close back below %s (failed breakout)".formatted(rupees(s.prior20High()))
                     : "Daily close below %s (stop loss)".formatted(rupees(plan.stopLoss()));
         }

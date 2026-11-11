@@ -61,6 +61,33 @@ class PositionalScorerTest {
     }
 
     @Test
+    void weeklyCloseBarelyAboveSixMonthHighIsNotABreakout() {
+        PositionalBuilder b = PositionalBuilder.bullishBreakout();
+        b.close = 493; // 0.6% above 490 - inside the 1% weekly buffer
+
+        TradeSignal signal = scorer.score(b.build(), NIFTY_6M);
+
+        assertThat(signal.bullishFactors()).noneMatch(r -> r.contains("6-month high"));
+        assertThat(signal.invalidation()).contains("stop loss");
+    }
+
+    @Test
+    void weeklyCloseClearlyAboveSixMonthHighIsABreakout() {
+        PositionalBuilder b = PositionalBuilder.bullishBreakout();
+        b.close = 495.5; // 1.1% above 490
+
+        assertThat(scorer.score(b.build(), NIFTY_6M).bullishFactors()).anyMatch(r -> r.contains("6-month high"));
+    }
+
+    @Test
+    void weeklyCloseBarelyBelowSixMonthLowIsNotABreakdown() {
+        PositionalBuilder b = PositionalBuilder.bearishBreakdown();
+        b.close = 308; // 0.6% below 310
+
+        assertThat(scorer.score(b.build(), NIFTY_6M).bearishFactors()).noneMatch(r -> r.contains("6-month low"));
+    }
+
+    @Test
     void overboughtWeeklyRsiIsAWarning() {
         PositionalBuilder b = PositionalBuilder.bullishBreakout();
         b.rsi = 85;

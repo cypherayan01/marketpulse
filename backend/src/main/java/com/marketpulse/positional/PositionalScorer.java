@@ -16,7 +16,7 @@ import static com.marketpulse.signals.Money.rupees;
  * <pre>
  * Trend      close vs 40-week avg ±10 · 40-week avg rising/falling ±8 · 10 vs 30-week EMA ±8 · close vs 10-week EMA ±4
  * Momentum   weekly MACD vs signal ±6 · weekly RSI zone -6..+6
- * Structure  6-month breakout/breakdown ±8, ±4 more on >= 1.5x weekly volume
+ * Structure  6-month breakout/breakdown ±8, ±4 more on >= 1.5x weekly volume (close must clear the level by 1%)
  *            within 10% of 52-week high +6 · more than 30% below it -6
  * Strength   6-month return vs Nifty beyond ±10 points: ±10 (leaders tend to keep leading)
  * </pre>
@@ -24,6 +24,7 @@ import static com.marketpulse.signals.Money.rupees;
 public class PositionalScorer {
 
     private static final double VOLUME_CONFIRMATION = 1.5;
+    static final double BREAKOUT_BUFFER = 0.01; // weekly bars are wider, so demand a clearer break
     private static final double RELATIVE_STRENGTH_EDGE = 0.10;
     private static final int RELIABLE_WEEKS = 60;
     private static final double TARGET_MULTIPLE = 3; // trends run longer on this horizon
@@ -45,12 +46,14 @@ public class PositionalScorer {
 
         double volumeRatio = s.avgVolume10w() > 0 ? s.volume() / s.avgVolume10w() : 0;
         boolean volumeConfirmed = volumeRatio >= VOLUME_CONFIRMATION;
-        if (s.close() > s.prior26wHigh()) {
+        boolean brokeOut = s.close() > s.prior26wHigh() * (1 + BREAKOUT_BUFFER);
+        boolean brokeDown = s.close() < s.prior26wLow() * (1 - BREAKOUT_BUFFER);
+        if (brokeOut) {
             f.add(8, "Broke above 6-month high (%s)".formatted(rupees(s.prior26wHigh())));
             if (volumeConfirmed) {
                 f.add(4, String.format(Locale.ROOT, "Breakout on %.1fx average weekly volume", volumeRatio));
             }
-        } else if (s.close() < s.prior26wLow()) {
+        } else if (brokeDown) {
             f.add(-8, "Broke below 6-month low (%s)".formatted(rupees(s.prior26wLow())));
             if (volumeConfirmed) {
                 f.add(-4, String.format(Locale.ROOT, "Breakdown on %.1fx average weekly volume", volumeRatio));
@@ -75,7 +78,7 @@ public class PositionalScorer {
         String invalidation = null;
         if (classification.bullish()) {
             plan = plan(s);
-            invalidation = s.close() > s.prior26wHigh()
+            invalidation = brokeOut
                     ? "Weekly close back below %s (failed breakout)".formatted(rupees(s.prior26wHigh()))
                     : "Weekly close below %s (stop loss)".formatted(rupees(plan.stopLoss()));
         }
