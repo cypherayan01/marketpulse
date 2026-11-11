@@ -4,6 +4,7 @@ import com.marketpulse.brief.PreMarketBriefService;
 import com.marketpulse.config.MarketPulseProperties;
 import com.marketpulse.news.NewsAlertService;
 import com.marketpulse.news.NewsRunSummary;
+import com.marketpulse.positional.PositionalScanService;
 import com.marketpulse.swing.EodWatchlistService;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
@@ -34,15 +35,18 @@ public class JobController {
     private final NewsAlertService newsAlertService;
     private final EodWatchlistService eodWatchlistService;
     private final PreMarketBriefService preMarketBriefService;
+    private final PositionalScanService positionalScanService;
     private final byte[] jobToken;
     /** Long scans run here so the scheduler's HTTP call returns immediately; one at a time. */
     private final ExecutorService background = Executors.newSingleThreadExecutor();
 
     public JobController(NewsAlertService newsAlertService, EodWatchlistService eodWatchlistService,
-                         PreMarketBriefService preMarketBriefService, MarketPulseProperties props) {
+                         PreMarketBriefService preMarketBriefService, PositionalScanService positionalScanService,
+                         MarketPulseProperties props) {
         this.newsAlertService = newsAlertService;
         this.eodWatchlistService = eodWatchlistService;
         this.preMarketBriefService = preMarketBriefService;
+        this.positionalScanService = positionalScanService;
         this.jobToken = props.jobToken() == null ? new byte[0] : props.jobToken().getBytes(StandardCharsets.UTF_8);
     }
 
@@ -72,6 +76,15 @@ public class JobController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         return runInBackground("Pre-market brief", () -> preMarketBriefService.run(force));
+    }
+
+    /** Weekly-chart scan for 1-6 month holds; meant for Sunday evening. */
+    @PostMapping("/positional")
+    public ResponseEntity<Void> runPositional(@RequestHeader(value = "X-Job-Token", required = false) String token) {
+        if (!authorized(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return runInBackground("Positional scan", positionalScanService::run);
     }
 
     private ResponseEntity<Void> runInBackground(String name, Runnable job) {

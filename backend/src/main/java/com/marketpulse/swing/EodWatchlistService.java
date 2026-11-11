@@ -1,5 +1,7 @@
 package com.marketpulse.swing;
 
+import com.marketpulse.signals.TradeSignal;
+
 import com.marketpulse.alerts.AlertDispatcher;
 import com.marketpulse.events.EventCalendar;
 import com.marketpulse.events.MarketEvent;
@@ -65,7 +67,7 @@ public class EodWatchlistService {
         }
 
         IndicatorSnapshot indexSnapshot = calculator.calculate(settings.indexSymbol(), index);
-        List<SwingSignal> signals = new ArrayList<>();
+        List<TradeSignal> signals = new ArrayList<>();
         List<String> failed = new ArrayList<>();
         for (String symbol : settings.universe()) {
             try {
@@ -76,19 +78,19 @@ public class EodWatchlistService {
             }
         }
 
-        List<SwingSignal> bullish = signals.stream()
+        List<TradeSignal> bullish = signals.stream()
                 .filter(s -> s.classification().bullish())
-                .sorted(Comparator.comparingInt(SwingSignal::score).reversed())
+                .sorted(Comparator.comparingInt(TradeSignal::score).reversed())
                 .limit(settings.topN())
                 .toList();
-        List<SwingSignal> bearish = signals.stream()
+        List<TradeSignal> bearish = signals.stream()
                 .filter(s -> s.classification().bearish())
-                .sorted(Comparator.comparingInt(SwingSignal::score))
+                .sorted(Comparator.comparingInt(TradeSignal::score))
                 .limit(settings.topN())
                 .toList();
 
         Map<String, MarketEvent> resultsSoon = new LinkedHashMap<>();
-        for (SwingSignal s : bullish) {
+        for (TradeSignal s : bullish) {
             calendar.nextResults(s.symbol(), today, settings.resultsWarningDays())
                     .ifPresent(e -> resultsSoon.put(s.symbol(), e));
         }

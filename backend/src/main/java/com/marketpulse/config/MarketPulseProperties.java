@@ -16,7 +16,8 @@ public record MarketPulseProperties(
         @DefaultValue Email email,
         @DefaultValue Swing swing,
         @DefaultValue Events events,
-        @DefaultValue Brief brief) {
+        @DefaultValue Brief brief,
+        @DefaultValue Positional positional) {
 
     public record News(
             @DefaultValue List<Feed> feeds,
@@ -57,6 +58,13 @@ public record MarketPulseProperties(
     }
 
     public record Cue(String name, String symbol) {
+    }
+
+    /** @param universe stocks to scan; empty means "same as swing.universe" */
+    public record Positional(
+            @DefaultValue List<String> universe,
+            @DefaultValue("5") int topN,
+            @DefaultValue("14") int resultsWarningDays) {
     }
 
     public record Claude(

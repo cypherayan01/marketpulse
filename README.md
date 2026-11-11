@@ -60,16 +60,34 @@ cron-job.org (Mon-Fri 08:30 IST)
 The swing report now warns `⚠️ Results on 17 Nov (in 6 days)` for setups with results inside
 `results-warning-days` (15), and lists the next 7 days' events.
 
+## Phase 4: Positional weekly scan (done)
+
+```
+cron-job.org (Sunday 18:00 IST)
+   └─ POST /jobs/positional → 202, runs in background (~20 s)
+        → the same 2 years of daily Yahoo candles, rolled up into ISO weeks (~104 weekly bars)
+        → ta4j on the weekly chart: 40-week SMA (+ its 4-week slope), EMA 10/30, RSI 14, MACD,
+          ATR 10, 26-week (6-month) high/low, weekly volume vs 10-week average, 52-week high
+        → PositionalScorer: trend, momentum, 6-month breakout, distance from 52-week high,
+          6-month strength vs Nifty (weighted most) · stop from weekly ATR / 8-week low · 1:3 target
+        → report: top 5 positional setups + top 5 "avoid / review long-term holdings" + next 7 days' events
+```
+
+Swing and positional scorers share `signals.Factors` (points → 0-100 score, why/watch-out split,
+confidence) and return the same `TradeSignal`. Rules are documented on `PositionalScorer` and
+specified by `PositionalScorerTest`. Universe: `marketpulse.positional.universe` (empty = swing's list).
+
 ## Run locally
 
 ```bash
 cd backend
-./mvnw test                                   # 87 tests
+./mvnw test                                   # 111 tests
 ./mvnw -DskipTests package
 JOB_TOKEN=local-test ANTHROPIC_API_KEY=sk-ant-... java -jar target/backend-0.0.1-SNAPSHOT.jar
 curl -X POST -H "X-Job-Token: local-test" localhost:8080/jobs/news
 curl -X POST -H "X-Job-Token: local-test" "localhost:8080/jobs/eod?force=true"        # report appears in the log
 curl -X POST -H "X-Job-Token: local-test" "localhost:8080/jobs/premarket?force=true"  # uses one Opus call
+curl -X POST -H "X-Job-Token: local-test" localhost:8080/jobs/positional
 ```
 
 Without Telegram/email configured, alerts are printed to the log.
@@ -96,8 +114,9 @@ The default sender `onboarding@resend.dev` can only email the address you signed
    - every 15 minutes, timeout 60s+ (first call after sleep takes ~1 min to wake Render)
    - second job: `POST /jobs/eod`, same header, **Mon-Fri 16:30, timezone Asia/Kolkata**
    - third job: `POST /jobs/premarket`, same header, **Mon-Fri 08:30, timezone Asia/Kolkata**
+   - fourth job: `POST /jobs/positional`, same header, **Sunday 18:00, timezone Asia/Kolkata**
 4. Anthropic Console → set a monthly spend limit.
 
 ## Next phases
 
-4. Positional weekly scan · 5. BTST 3 PM scan · 6. React dashboard on Vercel · 7. Signal tracking / paper trading
+5. BTST 3 PM scan · 6. React dashboard on Vercel · 7. Signal tracking / paper trading

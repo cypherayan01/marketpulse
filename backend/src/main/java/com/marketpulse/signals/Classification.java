@@ -1,9 +1,9 @@
-package com.marketpulse.swing;
+package com.marketpulse.signals;
 
 public enum Classification {
     STRONG_BULLISH, BULLISH, NEUTRAL, BEARISH, STRONG_BEARISH;
 
-    static Classification of(int score) {
+    public static Classification of(int score) {
         if (score >= 80) return STRONG_BULLISH;
         if (score >= 65) return BULLISH;
         if (score >= 45) return NEUTRAL;

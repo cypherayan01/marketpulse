@@ -4,6 +4,7 @@ import com.marketpulse.brief.PreMarketBriefService;
 import com.marketpulse.config.MarketPulseProperties;
 import com.marketpulse.news.NewsAlertService;
 import com.marketpulse.news.NewsRunSummary;
+import com.marketpulse.positional.PositionalScanService;
 import com.marketpulse.swing.EodWatchlistService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +38,9 @@ class JobControllerTest {
 
     @MockitoBean
     private PreMarketBriefService preMarketBriefService;
+
+    @MockitoBean
+    private PositionalScanService positionalScanService;
 
     @Test
     void rejectsRequestWithoutToken() throws Exception {
@@ -93,5 +97,18 @@ class JobControllerTest {
                 .andExpect(status().isAccepted());
 
         verify(preMarketBriefService, timeout(2000)).run(false);
+    }
+
+    @Test
+    void positionalJobRequiresToken() throws Exception {
+        mvc.perform(post("/jobs/positional")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void positionalJobIsAcceptedAndRunsInBackground() throws Exception {
+        mvc.perform(post("/jobs/positional").header("X-Job-Token", "test-token"))
+                .andExpect(status().isAccepted());
+
+        verify(positionalScanService, timeout(2000)).run();
     }
 }

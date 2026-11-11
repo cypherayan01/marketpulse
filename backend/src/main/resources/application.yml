@@ -189,3 +189,8 @@ marketpulse:
       - { name: "India VIX", symbol: "^INDIAVIX" }
       - { name: "Nifty 50 (prev close)", symbol: "^NSEI" }
       - { name: "Bank Nifty (prev close)", symbol: "^NSEBANK" }
+
+  positional:
+    top-n: 5                  # max stocks per list in the Sunday report
+    results-warning-days: 14  # suggest waiting for results due within two weeks
+    universe: []              # empty = same stocks as swing.universe

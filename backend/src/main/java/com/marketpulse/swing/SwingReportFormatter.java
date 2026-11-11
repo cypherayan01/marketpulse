@@ -1,5 +1,9 @@
 package com.marketpulse.swing;
 
+import com.marketpulse.signals.TradePlan;
+
+import com.marketpulse.signals.TradeSignal;
+
 import com.marketpulse.events.MarketEvent;
 
 import java.time.LocalDate;
@@ -9,7 +13,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-import static com.marketpulse.swing.SwingScorer.rupees;
+import static com.marketpulse.signals.Money.rupees;
 
 /** Plain-text swing watchlist that reads well in both Telegram and email. */
 final class SwingReportFormatter {
@@ -25,7 +29,7 @@ final class SwingReportFormatter {
         return "📊 Swing watchlist · %s · %d bullish, %d to avoid".formatted(DAY.format(session), bullish, bearish);
     }
 
-    static String body(EodWatchlistService.MarketContext market, List<SwingSignal> bullish, List<SwingSignal> bearish,
+    static String body(EodWatchlistService.MarketContext market, List<TradeSignal> bullish, List<TradeSignal> bearish,
                        Map<String, MarketEvent> resultsSoon, List<MarketEvent> events, LocalDate today,
                        int scanned, List<String> failed) {
         StringBuilder sb = new StringBuilder();
@@ -36,7 +40,7 @@ final class SwingReportFormatter {
             sb.append("No strong setups today - sitting out is a valid position.\n");
         }
         int n = 1;
-        for (SwingSignal s : bullish) {
+        for (TradeSignal s : bullish) {
             TradePlan p = s.plan();
             sb.append("\n%d. %s - %d/100 %s · confidence %s%n".formatted(n++, s.symbol(), s.score(),
                     s.classification().label(), s.confidence()));
@@ -58,9 +62,9 @@ final class SwingReportFormatter {
             sb.append("Nothing flagged.\n");
         }
         n = 1;
-        for (SwingSignal s : bearish) {
+        for (TradeSignal s : bearish) {
             sb.append("\n%d. %s - %d/100 %s · close %s%n".formatted(n++, s.symbol(), s.score(),
-                    s.classification().label(), rupees(s.snapshot().close())));
+                    s.classification().label(), rupees(s.close())));
             sb.append("   Why: ").append(String.join("; ", s.bearishFactors().stream().limit(4).toList())).append('\n');
         }
 

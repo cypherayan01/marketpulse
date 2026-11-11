@@ -26,6 +26,10 @@ import com.marketpulse.news.NewsRelevanceFilter;
 import com.marketpulse.news.NewsSource;
 import com.marketpulse.news.RssNewsSource;
 import com.marketpulse.news.SeenNewsRegistry;
+import com.marketpulse.positional.PositionalCalculator;
+import com.marketpulse.positional.PositionalScanService;
+import com.marketpulse.positional.PositionalScorer;
+import com.marketpulse.positional.PositionalSettings;
 import com.marketpulse.swing.EodWatchlistService;
 import com.marketpulse.swing.IndicatorCalculator;
 import com.marketpulse.swing.SwingScorer;
@@ -172,6 +176,18 @@ public class AppConfig {
         List<CueDefinition> cues = brief.cues().stream().map(c -> new CueDefinition(c.name(), c.symbol())).toList();
         return new PreMarketBriefService(market, cues, feeds.sources(), filter, calendar, writer, alertDispatcher, clock,
                 new BriefSettings(new HashSet<>(props.events().holidays()), brief.maxHeadlines(), brief.eventDays()));
+    }
+
+    // ---------- Phase 4: positional weekly scan ----------
+
+    @Bean
+    PositionalScanService positionalScanService(MarketPulseProperties props, MarketDataClient market,
+                                                AlertDispatcher alertDispatcher, EventCalendar calendar, Clock clock) {
+        MarketPulseProperties.Positional positional = props.positional();
+        List<String> universe = positional.universe().isEmpty() ? props.swing().universe() : positional.universe();
+        return new PositionalScanService(market, new PositionalCalculator(), new PositionalScorer(), alertDispatcher,
+                calendar, clock, new PositionalSettings(universe, props.swing().indexSymbol(), positional.topN(),
+                positional.resultsWarningDays()));
     }
 
     private static RestClient.Builder restClientBuilder() {

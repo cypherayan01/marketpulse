@@ -1,4 +1,4 @@
-package com.marketpulse.swing;
+package com.marketpulse.signals;
 
 /** How much the individual signals agree with each other - not a probability of success. */
 public enum Confidence {

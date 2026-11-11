@@ -1,5 +1,13 @@
 package com.marketpulse.swing;
 
+import com.marketpulse.signals.TradePlan;
+
+import com.marketpulse.signals.Confidence;
+
+import com.marketpulse.signals.Classification;
+
+import com.marketpulse.signals.TradeSignal;
+
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -12,7 +20,7 @@ class SwingScorerTest {
 
     @Test
     void textbookBreakoutIsStrongBullishWithHighConfidence() {
-        SwingSignal signal = scorer.score(SnapshotBuilder.bullishBreakout().build(), NIFTY_3M);
+        TradeSignal signal = scorer.score(SnapshotBuilder.bullishBreakout().build(), NIFTY_3M);
 
         assertThat(signal.classification()).isEqualTo(Classification.STRONG_BULLISH);
         assertThat(signal.score()).isEqualTo(100);
@@ -46,7 +54,7 @@ class SwingScorerTest {
 
     @Test
     void breakoutInvalidatesOnCloseBackBelowBreakoutLevel() {
-        SwingSignal signal = scorer.score(SnapshotBuilder.bullishBreakout().build(), NIFTY_3M);
+        TradeSignal signal = scorer.score(SnapshotBuilder.bullishBreakout().build(), NIFTY_3M);
 
         assertThat(signal.invalidation()).contains("108.00").contains("failed breakout");
     }
@@ -57,7 +65,7 @@ class SwingScorerTest {
         b.prior20High = 115;
         b.high52w = 130;
 
-        SwingSignal signal = scorer.score(b.build(), NIFTY_3M);
+        TradeSignal signal = scorer.score(b.build(), NIFTY_3M);
 
         assertThat(signal.classification()).isIn(Classification.BULLISH, Classification.STRONG_BULLISH);
         assertThat(signal.invalidation()).contains("104.00");
@@ -65,7 +73,7 @@ class SwingScorerTest {
 
     @Test
     void breakdownIsStrongBearishWithoutTradePlan() {
-        SwingSignal signal = scorer.score(SnapshotBuilder.bearishBreakdown().build(), NIFTY_3M);
+        TradeSignal signal = scorer.score(SnapshotBuilder.bearishBreakdown().build(), NIFTY_3M);
 
         assertThat(signal.classification()).isEqualTo(Classification.STRONG_BEARISH);
         assertThat(signal.score()).isZero();
@@ -81,7 +89,7 @@ class SwingScorerTest {
         assertThat(scorer.score(b.build(), NIFTY_3M).score()).isEqualTo(83);
         b.rsi = 80;                                                       // RSI +6 becomes -4 -> +33 points
 
-        SwingSignal overbought = scorer.score(b.build(), NIFTY_3M);
+        TradeSignal overbought = scorer.score(b.build(), NIFTY_3M);
 
         assertThat(overbought.score()).isEqualTo(75);
         assertThat(overbought.bearishFactors()).anyMatch(r -> r.contains("overbought"));
@@ -111,7 +119,7 @@ class SwingScorerTest {
         b.macd = 0.1; b.macdSignal = 0.2; b.cross = MacdCross.NONE; b.rsi = 48;
         b.prior20High = 103; b.prior20Low = 97; b.high52w = 120; b.return3m = 0.04;
 
-        SwingSignal signal = scorer.score(b.build(), NIFTY_3M);
+        TradeSignal signal = scorer.score(b.build(), NIFTY_3M);
 
         assertThat(signal.score()).isEqualTo(53); // +4 points -> 50 + 4 * 50/66
         assertThat(signal.classification()).isEqualTo(Classification.NEUTRAL);
@@ -121,7 +129,7 @@ class SwingScorerTest {
 
     @Test
     void separatesSupportingAndOpposingFactors() {
-        SwingSignal signal = scorer.score(SnapshotBuilder.bearishBreakdown().build(), NIFTY_3M);
+        TradeSignal signal = scorer.score(SnapshotBuilder.bearishBreakdown().build(), NIFTY_3M);
 
         assertThat(signal.bullishFactors()).isEmpty();
         assertThat(signal.bearishFactors()).contains("Below 200-day EMA (long-term downtrend)");
