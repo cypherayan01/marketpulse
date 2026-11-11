@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { UnauthorizedError, UnavailableError, type Api } from './api'
 import { Dashboard } from './components/Dashboard'
 import { LoginForm } from './components/LoginForm'
-import type { Dashboard as DashboardData, JobName } from './types'
+import type { Dashboard as DashboardData, JobName, Performance } from './types'
 
 const TOKEN_KEY = 'marketpulse.token'
 const MAX_WAKE_ATTEMPTS = 12 // ~2 minutes at the default delay; Render usually wakes in about one
@@ -12,7 +12,7 @@ type State =
   | { kind: 'loading' }
   | { kind: 'waking'; attempt: number }
   | { kind: 'error'; message: string }
-  | { kind: 'ready'; data: DashboardData }
+  | { kind: 'ready'; data: DashboardData; performance: Performance | null }
 
 interface Props {
   api: Api
@@ -35,7 +35,9 @@ export default function App({ api, retryDelayMs = 10_000 }: Props) {
     for (let attempt = 1; ; attempt++) {
       try {
         const data = await api.getDashboard(currentToken)
-        setState({ kind: 'ready', data })
+        // The track record lives in the database; if it can't be read, still show the rest of the dashboard.
+        const performance = await api.getPerformance(currentToken).catch(() => null)
+        setState({ kind: 'ready', data, performance })
         return
       } catch (error) {
         if (error instanceof UnauthorizedError) {
@@ -95,7 +97,7 @@ export default function App({ api, retryDelayMs = 10_000 }: Props) {
       )
     case 'ready':
       return (
-        <Dashboard data={state.data} status={status} onRun={run}
+        <Dashboard data={state.data} performance={state.performance} status={status} onRun={run}
                    onRefresh={() => token && load(token)} onLogout={() => logout()} />
       )
   }

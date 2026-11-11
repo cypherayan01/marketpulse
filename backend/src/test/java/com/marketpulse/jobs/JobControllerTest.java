@@ -7,6 +7,7 @@ import com.marketpulse.news.NewsAlertService;
 import com.marketpulse.news.NewsRunSummary;
 import com.marketpulse.positional.PositionalScanService;
 import com.marketpulse.swing.EodWatchlistService;
+import com.marketpulse.tracking.SignalTracker;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -47,6 +48,9 @@ class JobControllerTest {
     @MockitoBean
     private BtstScanService btstScanService;
 
+    @MockitoBean
+    private SignalTracker signalTracker;
+
     @Test
     void rejectsRequestWithoutToken() throws Exception {
         mvc.perform(post("/jobs/news")).andExpect(status().isUnauthorized());
@@ -81,6 +85,15 @@ class JobControllerTest {
                 .andExpect(status().isAccepted());
 
         verify(eodWatchlistService, timeout(2000)).run(false);
+        verify(signalTracker, timeout(2000)).update(); // paper trades move forward after the close
+    }
+
+    @Test
+    void trackJobRunsTheTracker() throws Exception {
+        mvc.perform(post("/jobs/track").header("X-Job-Token", "test-token"))
+                .andExpect(status().isAccepted());
+
+        verify(signalTracker, timeout(2000)).update();
     }
 
     @Test

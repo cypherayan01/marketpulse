@@ -1,7 +1,8 @@
 # MarketPulse dashboard (React + TypeScript + Vite)
 
-Reads `GET /api/dashboard` from the Spring Boot backend and shows the latest brief, swing / positional /
-BTST setups, scored news and upcoming events. Mobile-first.
+Reads `GET /api/dashboard` and `GET /api/performance` from the Spring Boot backend and shows the latest
+brief, swing / positional / BTST setups, scored news, upcoming events and the paper-trading track record.
+Mobile-first.
 
 ```bash
 npm install

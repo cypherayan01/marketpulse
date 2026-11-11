@@ -1,4 +1,4 @@
-import type { Dashboard, JobName } from './types'
+import type { Dashboard, JobName, Performance } from './types'
 
 /** The dashboard token was missing or wrong. */
 export class UnauthorizedError extends Error {
@@ -18,6 +18,7 @@ export class UnavailableError extends Error {
 
 export interface Api {
   getDashboard(token: string): Promise<Dashboard>
+  getPerformance(token: string): Promise<Performance>
   runJob(token: string, job: JobName): Promise<void>
 }
 
@@ -39,6 +40,10 @@ export function createApi(baseUrl: string): Api {
     async getDashboard(token) {
       const response = await call('/api/dashboard', token)
       return (await response.json()) as Dashboard
+    },
+    async getPerformance(token) {
+      const response = await call('/api/performance', token)
+      return (await response.json()) as Performance
     },
     async runJob(token, job) {
       await call(`/api/run/${job}`, token, { method: 'POST' })

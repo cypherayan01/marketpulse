@@ -3,11 +3,12 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { UnauthorizedError, UnavailableError, type Api } from './api'
 import App from './App'
-import { dashboard } from './test/fixtures'
+import { dashboard, performance } from './test/fixtures'
 
 function fakeApi(overrides: Partial<Api> = {}): Api {
   return {
     getDashboard: vi.fn().mockResolvedValue(dashboard),
+    getPerformance: vi.fn().mockResolvedValue(performance),
     runJob: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   }
@@ -72,6 +73,17 @@ describe('App', () => {
 
     await waitFor(() => expect(api.runJob).toHaveBeenCalledWith('secret', 'positional'))
     expect(screen.getByRole('status')).toHaveTextContent(/started/i)
+  })
+
+  it('shows the paper-trading track record', async () => {
+    localStorage.setItem('marketpulse.token', 'secret')
+    const api = fakeApi()
+    render(<App api={api} />)
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'Track record' }))
+
+    expect(screen.getByRole('region', { name: 'Swing track record' })).toBeInTheDocument()
+    expect(api.getPerformance).toHaveBeenCalledWith('secret')
   })
 
   it('logs out', async () => {

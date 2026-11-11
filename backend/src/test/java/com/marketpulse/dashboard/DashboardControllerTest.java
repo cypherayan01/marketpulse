@@ -17,6 +17,11 @@ import com.marketpulse.signals.TradePlan;
 import com.marketpulse.signals.TradeSignal;
 import com.marketpulse.signals.TradeStyle;
 import com.marketpulse.swing.EodWatchlistService;
+import com.marketpulse.tracking.JdbcSignalRepository;
+import com.marketpulse.tracking.SignalRepository;
+import com.marketpulse.tracking.SignalTracker;
+import com.marketpulse.tracking.TrackedSignal;
+import com.marketpulse.tracking.TradeStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -74,6 +79,18 @@ class DashboardControllerTest {
         }
 
         @Bean
+        SignalRepository signalRepository() {
+            SignalRepository repository = org.mockito.Mockito.mock(SignalRepository.class);
+            TrackedSignal open = TrackedSignal.open(TradeStyle.SWING, "AXISBANK", TODAY, 85,
+                    Classification.STRONG_BULLISH, Confidence.HIGH, 1336.4, 1275.33, 1458.55, Instant.EPOCH).withId(2);
+            TrackedSignal won = TrackedSignal.open(TradeStyle.SWING, "HDFCBANK", TODAY.minusDays(10), 86,
+                    Classification.STRONG_BULLISH, Confidence.HIGH, 100, 95, 110, Instant.EPOCH).withId(1)
+                    .close(TradeStatus.TARGET_HIT, TODAY.minusDays(3), 110, 7, 11, -1);
+            org.mockito.Mockito.when(repository.findAll()).thenReturn(List.of(open, won));
+            return repository;
+        }
+
+        @Bean
         Clock clock() {
             return Clock.fixed(Instant.parse("2026-11-11T12:00:00Z"), ZoneId.of("UTC"));
         }
@@ -87,6 +104,7 @@ class DashboardControllerTest {
     @MockitoBean private EodWatchlistService eod;
     @MockitoBean private PositionalScanService positional;
     @MockitoBean private BtstScanService btst;
+    @MockitoBean private SignalTracker tracker;
 
     @Test
     void rejectsRequestsWithoutTheDashboardToken() throws Exception {
@@ -118,6 +136,31 @@ class DashboardControllerTest {
         mvc.perform(post("/api/run/news").header("Authorization", "Bearer dash-token"))
                 .andExpect(status().isAccepted());
         verify(news, timeout(2000)).run();
+    }
+
+    @Test
+    void returnsTheTrackRecord() throws Exception {
+        mvc.perform(get("/api/performance").header("Authorization", "Bearer dash-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.styles[0].style").value("SWING"))
+                .andExpect(jsonPath("$.styles[0].closed").value(1))
+                .andExpect(jsonPath("$.styles[0].open").value(1))
+                .andExpect(jsonPath("$.styles[0].winRatePct").value(100.0))
+                .andExpect(jsonPath("$.open[0].symbol").value("AXISBANK"))
+                .andExpect(jsonPath("$.recentClosed[0].symbol").value("HDFCBANK"))
+                .andExpect(jsonPath("$.recentClosed[0].status").value("TARGET_HIT"));
+    }
+
+    @Test
+    void trackRecordNeedsTheToken() throws Exception {
+        mvc.perform(get("/api/performance")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void canStartTrackingFromTheDashboard() throws Exception {
+        mvc.perform(post("/api/run/track").header("Authorization", "Bearer dash-token"))
+                .andExpect(status().isAccepted());
+        verify(tracker, timeout(2000)).update();
     }
 
     @Test

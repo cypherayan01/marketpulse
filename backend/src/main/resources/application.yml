@@ -1,6 +1,15 @@
 spring:
   application:
     name: marketpulse
+  # Paper trades, results dates from news and dashboard snapshots. Without DATABASE_URL an in-memory H2 database
+  # is used (fine locally, lost on restart). Production: free Postgres on Neon - see README.
+  datasource:
+    url: ${DATABASE_URL:jdbc:h2:mem:marketpulse;MODE=PostgreSQL;DB_CLOSE_DELAY=-1}
+    username: ${DATABASE_USERNAME:sa}
+    password: ${DATABASE_PASSWORD:}
+    hikari:
+      maximum-pool-size: 3      # tiny app; keeps memory and free-tier connection limits low
+      connection-timeout: 30000 # Neon's free tier may need a few seconds to resume
 
 server:
   port: ${PORT:8080}   # Render injects PORT

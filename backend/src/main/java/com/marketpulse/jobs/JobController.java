@@ -7,6 +7,7 @@ import com.marketpulse.news.NewsAlertService;
 import com.marketpulse.news.NewsRunSummary;
 import com.marketpulse.positional.PositionalScanService;
 import com.marketpulse.swing.EodWatchlistService;
+import com.marketpulse.tracking.SignalTracker;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,17 +29,20 @@ public class JobController {
     private final PreMarketBriefService preMarketBriefService;
     private final PositionalScanService positionalScanService;
     private final BtstScanService btstScanService;
+    private final SignalTracker signalTracker;
     private final BackgroundJobs background;
     private final String jobToken;
 
     public JobController(NewsAlertService newsAlertService, EodWatchlistService eodWatchlistService,
                          PreMarketBriefService preMarketBriefService, PositionalScanService positionalScanService,
-                         BtstScanService btstScanService, BackgroundJobs background, MarketPulseProperties props) {
+                         BtstScanService btstScanService, SignalTracker signalTracker, BackgroundJobs background,
+                         MarketPulseProperties props) {
         this.newsAlertService = newsAlertService;
         this.eodWatchlistService = eodWatchlistService;
         this.preMarketBriefService = preMarketBriefService;
         this.positionalScanService = positionalScanService;
         this.btstScanService = btstScanService;
+        this.signalTracker = signalTracker;
         this.background = background;
         this.jobToken = props.jobToken();
     }
@@ -51,11 +55,23 @@ public class JobController {
         return ResponseEntity.ok(newsAlertService.run());
     }
 
-    /** Scans ~50 stocks (longer than cron-job.org's timeout), so it runs in the background: 202 Accepted. */
+    /**
+     * After the close: the swing scan, then paper-trade tracking with the day's candles. Takes longer than
+     * cron-job.org's timeout, so it runs in the background: 202 Accepted.
+     */
     @PostMapping("/eod")
     public ResponseEntity<Void> runEod(@RequestHeader(value = "X-Job-Token", required = false) String token,
                                        @RequestParam(defaultValue = "false") boolean force) {
-        return start(token, "EOD scan", () -> eodWatchlistService.run(force));
+        return start(token, "EOD scan + tracking", () -> {
+            eodWatchlistService.run(force);
+            signalTracker.update();
+        });
+    }
+
+    /** Paper-trade tracking on its own (it also runs after every /jobs/eod). */
+    @PostMapping("/track")
+    public ResponseEntity<Void> runTracking(@RequestHeader(value = "X-Job-Token", required = false) String token) {
+        return start(token, "Signal tracking", signalTracker::update);
     }
 
     /** Fetches global cues and asks Claude to write the brief (~30-60 s). */

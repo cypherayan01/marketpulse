@@ -91,4 +91,57 @@ export interface Dashboard {
   events: MarketEvent[]
 }
 
-export type JobName = 'news' | 'premarket' | 'eod' | 'positional' | 'btst'
+export type JobName = 'news' | 'premarket' | 'eod' | 'positional' | 'btst' | 'track'
+
+export type TradeStatus = 'OPEN' | 'TARGET_HIT' | 'STOPPED' | 'EXPIRED'
+
+export interface TrackedSignal {
+  id: number
+  style: TradeStyle
+  symbol: string
+  signalDate: string
+  score: number
+  classification: Classification
+  confidence: Confidence
+  entry: number
+  stop: number
+  target: number
+  status: TradeStatus
+  exitDate: string | null
+  exitPrice: number | null
+  returnPct: number | null
+  maxGainPct: number
+  maxLossPct: number
+  sessionsHeld: number
+}
+
+export interface Bucket {
+  label: string
+  closed: number
+  winRatePct: number
+  avgReturnPct: number
+}
+
+export interface StyleStats {
+  style: TradeStyle
+  open: number
+  closed: number
+  wins: number
+  winRatePct: number
+  avgReturnPct: number
+  avgWinPct: number
+  avgLossPct: number
+  targetHits: number
+  stops: number
+  expired: number
+  bestPct: number
+  worstPct: number
+  byScore: Bucket[]
+  byConfidence: Bucket[]
+}
+
+export interface Performance {
+  styles: StyleStats[]
+  open: TrackedSignal[]
+  recentClosed: TrackedSignal[]
+}

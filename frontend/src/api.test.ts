@@ -30,6 +30,17 @@ describe('api', () => {
     await expect(createApi('').getDashboard('t')).rejects.toBeInstanceOf(UnavailableError)
   })
 
+  it('fetches the track record', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ styles: [], open: [], recentClosed: [] })))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await createApi('https://api.example').getPerformance('secret')
+
+    expect(result.styles).toEqual([])
+    expect(fetchMock).toHaveBeenCalledWith('https://api.example/api/performance',
+      expect.objectContaining({ headers: { Authorization: 'Bearer secret' } }))
+  })
+
   it('starts a job with POST', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }))
     vi.stubGlobal('fetch', fetchMock)

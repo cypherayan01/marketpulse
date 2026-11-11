@@ -11,6 +11,12 @@ services:
         generateValue: true
       - key: DASHBOARD_TOKEN
         generateValue: true
+      - key: DATABASE_URL        # Neon JDBC URL, e.g. jdbc:postgresql://ep-xxx.aws.neon.tech/neondb?sslmode=require
+        sync: false
+      - key: DATABASE_USERNAME
+        sync: false
+      - key: DATABASE_PASSWORD
+        sync: false
       - key: DASHBOARD_ORIGINS   # your Vercel URL, e.g. https://marketpulse-xyz.vercel.app
         sync: false
       - key: ANTHROPIC_API_KEY

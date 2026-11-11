@@ -71,3 +71,9 @@ button.secondary { background: transparent; color: var(--accent); }
 .login { max-width: 360px; margin: 15vh auto; padding: 1.25rem; display: flex; flex-direction: column; gap: .6rem;
   background: var(--panel); border: 1px solid var(--border); border-radius: 12px; }
 .login input { font: inherit; padding: .55rem; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+
+.trades, .buckets { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.trades th, .buckets th { text-align: left; color: var(--muted); font-weight: 400; }
+.trades td, .trades th, .buckets td, .buckets th { padding: .25rem .4rem .25rem 0; border-bottom: 1px solid var(--border); }
+.buckets caption { text-align: left; color: var(--muted); padding: .5rem 0 .25rem; }
+.panel { overflow-x: auto; }

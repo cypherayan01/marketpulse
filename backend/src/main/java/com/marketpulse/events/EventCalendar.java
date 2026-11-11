@@ -7,6 +7,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * In-memory calendar of upcoming market events. Seeded from configuration; results dates found in news are
@@ -18,9 +19,15 @@ public class EventCalendar {
     private static final int SAME_QUARTER_DAYS = 30;
 
     private final List<MarketEvent> events = new ArrayList<>();
+    private Consumer<MarketEvent> newsResultsListener = e -> { };
 
     public EventCalendar(List<MarketEvent> seed) {
         seed.forEach(this::add);
+    }
+
+    /** Told about each results date from news that the calendar accepted (e.g. to save it). */
+    public synchronized void onNewsResults(Consumer<MarketEvent> listener) {
+        this.newsResultsListener = listener;
     }
 
     public synchronized void add(MarketEvent event) {
@@ -40,6 +47,9 @@ public class EventCalendar {
             return;
         }
         events.add(event);
+        if (event.type() == EventType.RESULTS && event.source() == Source.NEWS) {
+            newsResultsListener.accept(event);
+        }
     }
 
     /** Events from {@code from} up to and including {@code from + days}, earliest first. */

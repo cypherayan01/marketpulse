@@ -33,7 +33,14 @@ import com.marketpulse.positional.PositionalCalculator;
 import com.marketpulse.positional.PositionalScanService;
 import com.marketpulse.positional.PositionalScorer;
 import com.marketpulse.positional.PositionalSettings;
+import com.marketpulse.persistence.JdbcReportArchive;
+import com.marketpulse.persistence.JdbcResultsDateRepository;
 import com.marketpulse.reports.ReportStore;
+import com.marketpulse.tracking.JdbcSignalRepository;
+import com.marketpulse.tracking.PaperTradeEvaluator;
+import com.marketpulse.tracking.SignalRecorder;
+import com.marketpulse.tracking.SignalRepository;
+import com.marketpulse.tracking.SignalTracker;
 import com.marketpulse.swing.EodWatchlistService;
 import com.marketpulse.swing.IndicatorCalculator;
 import com.marketpulse.swing.SwingScorer;
@@ -44,7 +51,9 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.web.client.RestClient;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.net.http.HttpClient;
 import java.time.Clock;
@@ -67,9 +76,29 @@ public class AppConfig {
         return Clock.systemUTC();
     }
 
+    // ---------- Phase 7: persistence and paper-trade tracking ----------
+
     @Bean
-    ReportStore reportStore() {
-        return new ReportStore(200);
+    SignalRepository signalRepository(JdbcClient jdbc) {
+        return new JdbcSignalRepository(jdbc);
+    }
+
+    @Bean
+    JdbcResultsDateRepository resultsDateRepository(JdbcClient jdbc) {
+        return new JdbcResultsDateRepository(jdbc);
+    }
+
+    /** Dashboard reports, restored from the database on startup; every bullish setup becomes a paper trade. */
+    @Bean
+    ReportStore reportStore(JdbcClient jdbc, JsonMapper json, SignalRepository signals) {
+        ReportStore store = new ReportStore(200, new JdbcReportArchive(jdbc, json));
+        store.onScan(new SignalRecorder(signals));
+        return store;
+    }
+
+    @Bean
+    SignalTracker signalTracker(SignalRepository signals, YahooChartClient market) {
+        return new SignalTracker(signals, market, new PaperTradeEvaluator());
     }
 
     /** Holder beans: Spring treats List<T> and Optional<T> injection points specially, so wrap them. */
@@ -95,13 +124,17 @@ public class AppConfig {
     }
 
     @Bean
-    EventCalendar eventCalendar(MarketPulseProperties props) {
+    EventCalendar eventCalendar(MarketPulseProperties props, JdbcResultsDateRepository resultsDates) {
         List<MarketEvent> seed = new ArrayList<>();
         props.events().macro().forEach(e -> seed.add(
                 MarketEvent.macro(e.date(), e.title(), Impact.valueOf(e.impact().toUpperCase(Locale.ROOT)))));
         props.events().results().forEach(r -> seed.add(MarketEvent.results(r.date(), r.symbol(), Source.CONFIG)));
-        log.info("Event calendar seeded with {} events", seed.size());
-        return new EventCalendar(seed);
+        List<MarketEvent> fromNews = resultsDates.findAll();
+        seed.addAll(fromNews);
+        log.info("Event calendar seeded with {} events ({} results dates remembered from news)", seed.size(), fromNews.size());
+        EventCalendar calendar = new EventCalendar(seed);
+        calendar.onNewsResults(e -> resultsDates.save(e.symbol(), e.date()));
+        return calendar;
     }
 
     /** One Yahoo client for daily and intraday data, so its request spacing covers both. */

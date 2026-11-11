@@ -73,4 +73,18 @@ class EventCalendarTest {
 
         assertThat(calendar.nextResults("TCS", TODAY, 15)).isPresent();
     }
+
+    @Test
+    void tellsTheListenerAboutNewlyAcceptedNewsResultsDatesOnly() {
+        EventCalendar calendar = new EventCalendar(List.of(
+                MarketEvent.results(LocalDate.of(2026, 11, 20), "TCS", Source.CONFIG)));
+        java.util.List<MarketEvent> heard = new java.util.ArrayList<>();
+        calendar.onNewsResults(heard::add);
+
+        calendar.add(MarketEvent.results(LocalDate.of(2026, 11, 22), "TCS", Source.NEWS));   // loses to manual date
+        calendar.add(MarketEvent.results(LocalDate.of(2026, 11, 25), "INFY", Source.NEWS));  // accepted
+        calendar.add(MarketEvent.macro(LocalDate.of(2026, 12, 4), "RBI", Impact.HIGH));       // not news results
+
+        assertThat(heard).extracting(MarketEvent::symbol).containsExactly("INFY");
+    }
 }

@@ -51,6 +51,57 @@ class ReportStoreTest {
         assertThat(store.recentNews()).hasSize(1);
     }
 
+    @Test
+    void restoresTheLastSavedReportsOnStartup() {
+        RecordingArchive archive = new RecordingArchive();
+        archive.scans.add(scan(TradeStyle.SWING, "from yesterday"));
+        archive.news.add(new NewsEntry("old", "old headline", "ET", "https://x", NOW, NOW, 5, Direction.BULLISH,
+                List.of(), List.of(), "why", false));
+
+        ReportStore store = new ReportStore(100, archive);
+
+        assertThat(store.latestScan(TradeStyle.SWING)).map(ScanReport::market).contains("from yesterday");
+        assertThat(store.recentNews()).extracting(NewsEntry::title).containsExactly("old headline");
+    }
+
+    @Test
+    void savesEveryReportToTheArchiveAndTellsListeners() {
+        RecordingArchive archive = new RecordingArchive();
+        ReportStore store = new ReportStore(100, archive);
+        java.util.List<ScanReport> heard = new java.util.ArrayList<>();
+        store.onScan(heard::add);
+
+        store.saveScan(scan(TradeStyle.BTST, "btst"));
+        store.addNews(impact("one"), false, NOW);
+
+        assertThat(archive.scans).extracting(ScanReport::market).containsExactly("btst");
+        assertThat(heard).extracting(ScanReport::market).containsExactly("btst");
+        assertThat(archive.news).extracting(NewsEntry::title).containsExactly("one");
+    }
+
+    @Test
+    void aFailingListenerDoesNotLoseTheReport() {
+        ReportStore store = new ReportStore(100);
+        store.onScan(r -> { throw new IllegalStateException("database down"); });
+
+        store.saveScan(scan(TradeStyle.SWING, "kept"));
+
+        assertThat(store.latestScan(TradeStyle.SWING)).isPresent();
+    }
+
+    private static class RecordingArchive implements ReportArchive {
+        final java.util.List<ScanReport> scans = new java.util.ArrayList<>();
+        final java.util.List<NewsEntry> news = new java.util.ArrayList<>();
+        BriefReport brief;
+
+        @Override public void saveScan(ScanReport report) { scans.add(report); }
+        @Override public void saveBrief(BriefReport report) { brief = report; }
+        @Override public void saveNews(java.util.List<NewsEntry> all) { news.clear(); news.addAll(all); }
+        @Override public java.util.List<ScanReport> loadScans() { return scans; }
+        @Override public java.util.Optional<BriefReport> loadBrief() { return java.util.Optional.ofNullable(brief); }
+        @Override public java.util.List<NewsEntry> loadNews() { return news; }
+    }
+
     private static ScanReport scan(TradeStyle style, String market) {
         return new ScanReport(style, NOW, LocalDate.of(2026, 11, 11), market, List.of(), List.of(), Map.of(),
                 List.of(), 0, List.of(), List.of());

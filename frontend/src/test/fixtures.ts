@@ -1,4 +1,4 @@
-import type { Dashboard, ScanReport, TradeSignal } from '../types'
+import type { Dashboard, Performance, ScanReport, TradeSignal } from '../types'
 
 export const bullishSignal: TradeSignal = {
   symbol: 'HDFCBANK',
@@ -71,4 +71,32 @@ export const dashboard: Dashboard = {
   events: [
     { date: '2026-12-04', type: 'MACRO', symbol: null, title: 'RBI monetary policy decision', impact: 'HIGH', source: 'CONFIG' },
   ],
+}
+
+const emptyStats = (style: 'SWING' | 'POSITIONAL' | 'BTST') => ({
+  style, open: 0, closed: 0, wins: 0, winRatePct: 0, avgReturnPct: 0, avgWinPct: 0, avgLossPct: 0,
+  targetHits: 0, stops: 0, expired: 0, bestPct: 0, worstPct: 0, byScore: [], byConfidence: [],
+})
+
+export const performance: Performance = {
+  styles: [
+    {
+      style: 'SWING', open: 1, closed: 4, wins: 2, winRatePct: 50, avgReturnPct: 0.5, avgWinPct: 5.5, avgLossPct: -4.5,
+      targetHits: 1, stops: 2, expired: 1, bestPct: 10, worstPct: -5,
+      byScore: [{ label: '80-100', closed: 2, winRatePct: 50, avgReturnPct: 2.5 }, { label: '65-79', closed: 2, winRatePct: 50, avgReturnPct: -1.5 }],
+      byConfidence: [{ label: 'HIGH', closed: 4, winRatePct: 50, avgReturnPct: 0.5 }],
+    },
+    emptyStats('POSITIONAL'),
+    emptyStats('BTST'),
+  ],
+  open: [{
+    id: 2, style: 'SWING', symbol: 'AXISBANK', signalDate: '2026-11-11', score: 85, classification: 'STRONG_BULLISH',
+    confidence: 'HIGH', entry: 1336.4, stop: 1275.33, target: 1458.55, status: 'OPEN', exitDate: null, exitPrice: null,
+    returnPct: null, maxGainPct: 2.1, maxLossPct: -0.8, sessionsHeld: 3,
+  }],
+  recentClosed: [{
+    id: 1, style: 'SWING', symbol: 'HDFCBANK', signalDate: '2026-11-01', score: 86, classification: 'STRONG_BULLISH',
+    confidence: 'HIGH', entry: 100, stop: 95, target: 110, status: 'TARGET_HIT', exitDate: '2026-11-08', exitPrice: 110,
+    returnPct: 10, maxGainPct: 11, maxLossPct: -1, sessionsHeld: 5,
+  }],
 }

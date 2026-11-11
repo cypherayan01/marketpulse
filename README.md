@@ -113,11 +113,38 @@ backend: every job saves its latest output in ReportStore (in memory) → one JS
 
 See `frontend/README.md` for local dev and Vercel deployment.
 
+## Phase 7: Signal tracking & paper trading (done)
+
+```
+every saved scan ──► SignalRecorder: each bullish setup with a plan → OPEN paper trade
+                     (one open trade per stock per style; same day's signal never stored twice)
+POST /jobs/eod ────► swing scan, then SignalTracker walks open trades through the new daily candles:
+                     stop first if a day hits both · gaps fill at the open · swing exits after 15
+                     sessions, positional after 120, BTST at the next open (≈ "exit by 10:30")
+GET /api/performance ► per style: win rate, average return per trade (expectancy), avg win / loss,
+                     target vs stop vs time exits, split by score band and confidence
+```
+
+Also stored in the database now: results dates found in news, and the latest dashboard reports
+(so a Render restart no longer empties the dashboard or forgets those dates).
+
+**Database:** Spring JDBC + Flyway (`backend/src/main/resources/db/migration`). Without
+`DATABASE_URL` the app uses in-memory H2 (zero setup, but lost on restart). For production use
+free Postgres on **Neon**:
+1. neon.tech → new project (region close to Render, e.g. Singapore) → Connection details →
+   choose **Java** to get a `jdbc:postgresql://…?sslmode=require` URL.
+2. On Render set `DATABASE_URL` (the JDBC URL without user/password), `DATABASE_USERNAME`,
+   `DATABASE_PASSWORD`. Migrations run automatically on startup.
+3. Neon's free tier suspends when idle; the first query after that takes a few seconds (the pool waits 30 s).
+
+Treat the track record with care: under ~30 closed trades per style it's noise, and paper trades
+ignore brokerage, taxes and slippage.
+
 ## Run locally
 
 ```bash
 cd backend
-./mvnw test                                   # 152 tests
+./mvnw test                                   # 187 tests (H2 for the database tests)
 # dashboard API: also set DASHBOARD_TOKEN=... (and DASHBOARD_ORIGINS for a non-local frontend)
 ./mvnw -DskipTests package
 JOB_TOKEN=local-test ANTHROPIC_API_KEY=sk-ant-... java -jar target/backend-0.0.1-SNAPSHOT.jar
@@ -160,4 +187,5 @@ The default sender `onboarding@resend.dev` can only email the address you signed
 
 ## Next phases
 
-7. Signal tracking / paper trading · holdings health check
+- Holdings health check (daily "still valid / stop broken" for stocks you actually own)
+- Use the track record to tune weights once each style has ~30+ closed trades
