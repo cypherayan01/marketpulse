@@ -32,6 +32,19 @@ class AlertDispatcherTest {
         assertThat(new AlertDispatcher(List.of(broken)).dispatch(impact())).isFalse();
     }
 
+    @Test
+    void sendsPlainMessagesToAllChannels() {
+        List<String> a = new ArrayList<>();
+        List<String> b = new ArrayList<>();
+
+        boolean sent = new AlertDispatcher(List.of((s, body) -> a.add(s + body), (s, body) -> b.add(s + body)))
+                .send("Subject", "Body");
+
+        assertThat(sent).isTrue();
+        assertThat(a).containsExactly("SubjectBody");
+        assertThat(b).containsExactly("SubjectBody");
+    }
+
     private static NewsImpact impact() {
         return new NewsImpact(new NewsItem("1", "RBI cuts rates", "", "https://x", "Test", Instant.now()),
                 9, Direction.BULLISH, List.of("Banking"), List.of(), "Lower rates help lenders.");

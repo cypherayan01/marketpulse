@@ -12,7 +12,8 @@ public record MarketPulseProperties(
         @DefaultValue News news,
         @DefaultValue Claude claude,
         @DefaultValue Telegram telegram,
-        @DefaultValue Email email) {
+        @DefaultValue Email email,
+        @DefaultValue Swing swing) {
 
     public record News(
             @DefaultValue List<Feed> feeds,
@@ -24,6 +25,12 @@ public record MarketPulseProperties(
     }
 
     public record Feed(String name, String url) {
+    }
+
+    public record Swing(
+            @DefaultValue List<String> universe,
+            @DefaultValue("^NSEI") String indexSymbol,
+            @DefaultValue("5") int topN) {
     }
 
     public record Claude(

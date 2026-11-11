@@ -7,6 +7,8 @@ import com.marketpulse.alerts.LoggingNotifier;
 import com.marketpulse.alerts.Notifier;
 import com.marketpulse.alerts.ResendEmailNotifier;
 import com.marketpulse.alerts.TelegramNotifier;
+import com.marketpulse.market.MarketDataClient;
+import com.marketpulse.market.YahooChartClient;
 import com.marketpulse.news.ClaudeNewsImpactAnalyzer;
 import com.marketpulse.news.NewsAlertService;
 import com.marketpulse.news.NewsAlertSettings;
@@ -15,6 +17,10 @@ import com.marketpulse.news.NewsRelevanceFilter;
 import com.marketpulse.news.NewsSource;
 import com.marketpulse.news.RssNewsSource;
 import com.marketpulse.news.SeenNewsRegistry;
+import com.marketpulse.swing.EodWatchlistService;
+import com.marketpulse.swing.IndicatorCalculator;
+import com.marketpulse.swing.SwingScorer;
+import com.marketpulse.swing.SwingSettings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -34,6 +40,7 @@ import java.util.List;
 public class AppConfig {
 
     private static final Logger log = LoggerFactory.getLogger(AppConfig.class);
+    private static final String USER_AGENT = "Mozilla/5.0 (compatible; MarketPulse/1.0)";
 
     @Bean
     Clock clock() {
@@ -41,10 +48,11 @@ public class AppConfig {
     }
 
     @Bean
-    NewsAlertService newsAlertService(MarketPulseProperties props, NewsImpactAnalyzer analyzer, Clock clock) {
+    NewsAlertService newsAlertService(MarketPulseProperties props, NewsImpactAnalyzer analyzer,
+                                      AlertDispatcher alertDispatcher, Clock clock) {
         MarketPulseProperties.News news = props.news();
         RestClient feedClient = restClientBuilder()
-                .defaultHeader("User-Agent", "Mozilla/5.0 (compatible; MarketPulse/1.0)")
+                .defaultHeader("User-Agent", USER_AGENT)
                 .build();
         List<NewsSource> sources = news.feeds().stream()
                 .<NewsSource>map(f -> new RssNewsSource(f.name(), f.url(), feedClient))
@@ -56,7 +64,7 @@ public class AppConfig {
                 new NewsRelevanceFilter(news.keywords(), news.watchlist()),
                 new SeenNewsRegistry(5_000),
                 analyzer,
-                alertDispatcher(props),
+                alertDispatcher,
                 clock,
                 new NewsAlertSettings(news.lookback(), news.impactThreshold(), news.batchSize()));
     }
@@ -76,7 +84,22 @@ public class AppConfig {
         return new ClaudeNewsImpactAnalyzer(client, props.claude().triageModel());
     }
 
-    private AlertDispatcher alertDispatcher(MarketPulseProperties props) {
+    @Bean
+    MarketDataClient marketDataClient() {
+        return new YahooChartClient(restClientBuilder().defaultHeader("User-Agent", USER_AGENT));
+    }
+
+    @Bean
+    EodWatchlistService eodWatchlistService(MarketPulseProperties props, MarketDataClient market,
+                                            AlertDispatcher alertDispatcher, Clock clock) {
+        MarketPulseProperties.Swing swing = props.swing();
+        log.info("Swing scanner configured with {} stocks", swing.universe().size());
+        return new EodWatchlistService(market, new IndicatorCalculator(), new SwingScorer(), alertDispatcher, clock,
+                new SwingSettings(swing.universe(), swing.indexSymbol(), swing.topN()));
+    }
+
+    @Bean
+    AlertDispatcher alertDispatcher(MarketPulseProperties props) {
         List<Notifier> notifiers = new ArrayList<>();
         if (props.telegram().configured()) {
             notifiers.add(new TelegramNotifier(restClientBuilder(), props.telegram().botToken(), props.telegram().chatId()));

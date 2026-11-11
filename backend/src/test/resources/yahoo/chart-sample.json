@@ -1,0 +1,4 @@
+{"chart":{"result":[{"meta":{"currency":"INR","symbol":"M&M.NS","exchangeTimezoneName":"Asia/Kolkata"},
+"timestamp":[1794282300,1794368700,1794455100],
+"indicators":{"quote":[{"open":[3400.0,null,3450.5],"high":[3420.0,null,3480.0],"low":[3390.0,null,3440.0],
+"close":[3410.0,null,3465.0],"volume":[1200000,null,1500000]}]}}],"error":null}}

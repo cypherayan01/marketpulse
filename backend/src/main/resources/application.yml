@@ -137,3 +137,13 @@ marketpulse:
       - Larsen
       - Bharti Airtel
       - ITC
+
+  swing:
+    index-symbol: ^NSEI   # Nifty 50 - market context and relative strength benchmark
+    top-n: 5              # max stocks per list in the daily report
+    # Stocks scanned after the close (Nifty 50 as of Nov 2026). Plain NSE symbols.
+    universe: [RELIANCE, HDFCBANK, ICICIBANK, INFY, TCS, BHARTIARTL, ITC, SBIN, LT, HINDUNILVR,
+               KOTAKBANK, AXISBANK, BAJFINANCE, "M&M", MARUTI, SUNPHARMA, HCLTECH, TITAN, ULTRACEMCO, NTPC,
+               POWERGRID, ONGC, TATASTEEL, ASIANPAINT, ADANIENT, ADANIPORTS, BAJAJFINSV, WIPRO, NESTLEIND, COALINDIA,
+               JSWSTEEL, GRASIM, TECHM, HINDALCO, DRREDDY, CIPLA, SBILIFE, HDFCLIFE, EICHERMOT, APOLLOHOSP,
+               TATACONSUM, BAJAJ-AUTO, SHRIRAMFIN, BEL, TRENT, INDIGO, ETERNAL, JIOFIN, TMPV, MAXHEALTH]

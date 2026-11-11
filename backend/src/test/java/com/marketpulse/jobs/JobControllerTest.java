@@ -3,6 +3,7 @@ package com.marketpulse.jobs;
 import com.marketpulse.config.MarketPulseProperties;
 import com.marketpulse.news.NewsAlertService;
 import com.marketpulse.news.NewsRunSummary;
+import com.marketpulse.swing.EodWatchlistService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -12,6 +13,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -28,6 +30,9 @@ class JobControllerTest {
 
     @MockitoBean
     private NewsAlertService newsAlertService;
+
+    @MockitoBean
+    private EodWatchlistService eodWatchlistService;
 
     @Test
     void rejectsRequestWithoutToken() throws Exception {
@@ -50,5 +55,26 @@ class JobControllerTest {
                 .andExpect(jsonPath("$.fetched").value(40))
                 .andExpect(jsonPath("$.relevant").value(5))
                 .andExpect(jsonPath("$.alerted").value(1));
+    }
+
+    @Test
+    void eodJobRequiresToken() throws Exception {
+        mvc.perform(post("/jobs/eod")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void eodJobIsAcceptedAndRunsInBackground() throws Exception {
+        mvc.perform(post("/jobs/eod").header("X-Job-Token", "test-token"))
+                .andExpect(status().isAccepted());
+
+        verify(eodWatchlistService, timeout(2000)).run(false);
+    }
+
+    @Test
+    void eodJobCanBeForcedOnHolidays() throws Exception {
+        mvc.perform(post("/jobs/eod").param("force", "true").header("X-Job-Token", "test-token"))
+                .andExpect(status().isAccepted());
+
+        verify(eodWatchlistService, timeout(2000)).run(true);
     }
 }

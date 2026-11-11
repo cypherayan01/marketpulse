@@ -25,4 +25,18 @@ class TelegramNotifierTest {
 
         server.verify();
     }
+
+    @Test
+    void splitsLongMessagesAtLineBreaksUnderTelegramLimit() {
+        String line = "x".repeat(99) + "\n"; // 100 chars per line
+        String body = line.repeat(90);         // 9,000 chars -> needs 3 messages of <= 4,000
+
+        java.util.List<String> chunks = TelegramNotifier.chunks("Subject", body);
+
+        org.assertj.core.api.Assertions.assertThat(chunks).hasSize(3);
+        org.assertj.core.api.Assertions.assertThat(chunks).allMatch(c -> c.length() <= 4000);
+        org.assertj.core.api.Assertions.assertThat(chunks.getFirst()).startsWith("Subject\n\n");
+        org.assertj.core.api.Assertions.assertThat(String.join("", chunks).replace("Subject\n\n", ""))
+                .isEqualTo(body);
+    }
 }

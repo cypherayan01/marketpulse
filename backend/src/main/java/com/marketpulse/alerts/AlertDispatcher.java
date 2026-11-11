@@ -19,8 +19,11 @@ public class AlertDispatcher {
 
     /** @return true if at least one channel delivered the alert */
     public boolean dispatch(NewsImpact impact) {
-        String subject = AlertFormatter.subject(impact);
-        String body = AlertFormatter.body(impact);
+        return send(AlertFormatter.subject(impact), AlertFormatter.body(impact));
+    }
+
+    /** Sends a ready-made message (reports, briefs). @return true if at least one channel delivered it */
+    public boolean send(String subject, String body) {
         boolean delivered = false;
         for (Notifier notifier : notifiers) {
             try {

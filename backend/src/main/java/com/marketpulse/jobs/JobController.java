@@ -3,29 +3,43 @@ package com.marketpulse.jobs;
 import com.marketpulse.config.MarketPulseProperties;
 import com.marketpulse.news.NewsAlertService;
 import com.marketpulse.news.NewsRunSummary;
+import com.marketpulse.swing.EodWatchlistService;
+import jakarta.annotation.PreDestroy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
- * Endpoints triggered by an external scheduler (GitHub Actions / cron-job.org).
+ * Endpoints triggered by an external scheduler (cron-job.org).
  * On Render's free tier the app sleeps, so in-process @Scheduled jobs would not fire reliably.
  */
 @RestController
 @RequestMapping("/jobs")
 public class JobController {
 
-    private final NewsAlertService newsAlertService;
-    private final byte[] jobToken;
+    private static final Logger log = LoggerFactory.getLogger(JobController.class);
 
-    public JobController(NewsAlertService newsAlertService, MarketPulseProperties props) {
+    private final NewsAlertService newsAlertService;
+    private final EodWatchlistService eodWatchlistService;
+    private final byte[] jobToken;
+    /** Long scans run here so the scheduler's HTTP call returns immediately; one at a time. */
+    private final ExecutorService background = Executors.newSingleThreadExecutor();
+
+    public JobController(NewsAlertService newsAlertService, EodWatchlistService eodWatchlistService,
+                         MarketPulseProperties props) {
         this.newsAlertService = newsAlertService;
+        this.eodWatchlistService = eodWatchlistService;
         this.jobToken = props.jobToken() == null ? new byte[0] : props.jobToken().getBytes(StandardCharsets.UTF_8);
     }
 
@@ -35,6 +49,28 @@ public class JobController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         return ResponseEntity.ok(newsAlertService.run());
+    }
+
+    /** Scans ~50 stocks (takes longer than cron-job.org's timeout), so it runs in the background: 202 Accepted. */
+    @PostMapping("/eod")
+    public ResponseEntity<Void> runEod(@RequestHeader(value = "X-Job-Token", required = false) String token,
+                                       @RequestParam(defaultValue = "false") boolean force) {
+        if (!authorized(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        background.submit(() -> {
+            try {
+                eodWatchlistService.run(force);
+            } catch (RuntimeException e) {
+                log.error("EOD scan failed", e);
+            }
+        });
+        return ResponseEntity.accepted().build();
+    }
+
+    @PreDestroy
+    void shutdown() {
+        background.shutdown();
     }
 
     private boolean authorized(String token) {
