@@ -8,6 +8,7 @@ import com.marketpulse.news.NewsRunSummary;
 import com.marketpulse.positional.PositionalScanService;
 import com.marketpulse.swing.EodWatchlistService;
 import com.marketpulse.tracking.SignalTracker;
+import com.marketpulse.holdings.HoldingsCheckService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -51,6 +52,9 @@ class JobControllerTest {
     @MockitoBean
     private SignalTracker signalTracker;
 
+    @MockitoBean
+    private HoldingsCheckService holdingsCheckService;
+
     @Test
     void rejectsRequestWithoutToken() throws Exception {
         mvc.perform(post("/jobs/news")).andExpect(status().isUnauthorized());
@@ -86,6 +90,15 @@ class JobControllerTest {
 
         verify(eodWatchlistService, timeout(2000)).run(false);
         verify(signalTracker, timeout(2000)).update(); // paper trades move forward after the close
+        verify(holdingsCheckService, timeout(2000)).run(false); // and your own holdings are checked
+    }
+
+    @Test
+    void holdingsJobRunsTheHoldingsCheck() throws Exception {
+        mvc.perform(post("/jobs/holdings").header("X-Job-Token", "test-token"))
+                .andExpect(status().isAccepted());
+
+        verify(holdingsCheckService, timeout(2000)).run(false);
     }
 
     @Test

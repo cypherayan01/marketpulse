@@ -140,11 +140,25 @@ free Postgres on **Neon**:
 Treat the track record with care: under ~30 closed trades per style it's noise, and paper trades
 ignore brokerage, taxes and slippage.
 
+## Holdings health check (done)
+
+Add the stocks you own on the dashboard (**My holdings** tab; `POST /api/holdings` checks the symbol
+has NSE price data). After every close, `/jobs/eod` also checks them:
+
+- 🔴 **EXIT** - closed below the active stop: the tighter of *your* stop and a **trailing stop**
+  (highest close since you bought minus 2 ATR for swing, 3 ATR for positional), so gains get protected
+- 🟡 **REVIEW** - the setup turned bearish, the trend average broke (50-day EMA swing / 40-week
+  average positional), or results are due within 7 days
+- 🟢 **HOLD** - otherwise; notes such as "target reached"
+
+You get a "💼 Holdings check" message (exits first, P&L in % and ₹), and the tab shows the same.
+`POST /jobs/holdings` runs it on its own; adding a holding on the dashboard checks it right away.
+
 ## Run locally
 
 ```bash
 cd backend
-./mvnw test                                   # 187 tests (H2 for the database tests)
+./mvnw test                                   # 211 tests (H2 for the database tests)
 # dashboard API: also set DASHBOARD_TOKEN=... (and DASHBOARD_ORIGINS for a non-local frontend)
 ./mvnw -DskipTests package
 JOB_TOKEN=local-test ANTHROPIC_API_KEY=sk-ant-... java -jar target/backend-0.0.1-SNAPSHOT.jar
@@ -179,6 +193,7 @@ The default sender `onboarding@resend.dev` can only email the address you signed
    - every 15 minutes, timeout 60s+ (first call after sleep takes ~1 min to wake Render)
    - second job: `POST /jobs/eod`, same header, **Mon-Fri 16:30, timezone Asia/Kolkata**
    - third job: `POST /jobs/premarket`, same header, **Mon-Fri 08:30, timezone Asia/Kolkata**
+   - (`/jobs/eod` also runs paper-trade tracking and the holdings check - no extra jobs needed)
    - fourth job: `POST /jobs/positional`, same header, **Sunday 18:00, timezone Asia/Kolkata**
    - fifth job: `POST /jobs/btst`, same header, **Mon-Fri 15:00, timezone Asia/Kolkata**
 4. Anthropic Console → set a monthly spend limit.
@@ -187,5 +202,4 @@ The default sender `onboarding@resend.dev` can only email the address you signed
 
 ## Next phases
 
-- Holdings health check (daily "still valid / stop broken" for stocks you actually own)
 - Use the track record to tune weights once each style has ~30+ closed trades

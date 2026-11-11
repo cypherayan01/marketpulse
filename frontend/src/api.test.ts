@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createApi, UnauthorizedError, UnavailableError } from './api'
+import { createApi, UnauthorizedError, UnavailableError, ValidationError } from './api'
 import { dashboard } from './test/fixtures'
 
 describe('api', () => {
@@ -39,6 +39,30 @@ describe('api', () => {
     expect(result.styles).toEqual([])
     expect(fetchMock).toHaveBeenCalledWith('https://api.example/api/performance',
       expect.objectContaining({ headers: { Authorization: 'Bearer secret' } }))
+  })
+
+  it('adds a holding and reports the server’s validation message', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: 'quantity must be greater than 0' }), { status: 400 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const added = createApi('https://api.example').addHolding('secret', {
+      symbol: 'TCS', quantity: 0, buyPrice: 1, buyDate: '2026-11-11', horizon: 'SWING', stopLoss: null, target: null,
+    })
+
+    await expect(added).rejects.toEqual(new ValidationError('quantity must be greater than 0'))
+    expect(fetchMock).toHaveBeenCalledWith('https://api.example/api/holdings', expect.objectContaining({
+      method: 'POST',
+      headers: { Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
+    }))
+  })
+
+  it('deletes a holding', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await createApi('https://api.example').deleteHolding('secret', 3)
+
+    expect(fetchMock).toHaveBeenCalledWith('https://api.example/api/holdings/3', expect.objectContaining({ method: 'DELETE' }))
   })
 
   it('starts a job with POST', async () => {

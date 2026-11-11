@@ -12,17 +12,23 @@ public interface ReportArchive {
 
     void saveNews(List<NewsEntry> news);
 
+    void saveHoldings(HoldingsReport report);
+
     List<ScanReport> loadScans();
 
     Optional<BriefReport> loadBrief();
 
     List<NewsEntry> loadNews();
 
+    Optional<HoldingsReport> loadHoldings();
+
     /** Keeps nothing - for tests and when no database is wanted. */
     ReportArchive NONE = new ReportArchive() {
         @Override public void saveScan(ScanReport report) { }
         @Override public void saveBrief(BriefReport report) { }
         @Override public void saveNews(List<NewsEntry> news) { }
+        @Override public void saveHoldings(HoldingsReport report) { }
+        @Override public Optional<HoldingsReport> loadHoldings() { return Optional.empty(); }
         @Override public List<ScanReport> loadScans() { return List.of(); }
         @Override public Optional<BriefReport> loadBrief() { return Optional.empty(); }
         @Override public List<NewsEntry> loadNews() { return List.of(); }

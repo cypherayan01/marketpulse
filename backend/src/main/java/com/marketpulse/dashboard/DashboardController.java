@@ -15,6 +15,7 @@ import com.marketpulse.tracking.PerformanceCalculator;
 import com.marketpulse.tracking.SignalRepository;
 import com.marketpulse.tracking.SignalTracker;
 import com.marketpulse.tracking.TrackedSignal;
+import com.marketpulse.holdings.HoldingsCheckService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -52,7 +53,7 @@ public class DashboardController {
     public DashboardController(ReportStore store, EventCalendar calendar, Clock clock, BackgroundJobs background,
                                MarketPulseProperties props, NewsAlertService news, PreMarketBriefService brief,
                                EodWatchlistService eod, PositionalScanService positional, BtstScanService btst,
-                               SignalRepository signals, SignalTracker tracker) {
+                               SignalRepository signals, SignalTracker tracker, HoldingsCheckService holdingsCheck) {
         this.store = store;
         this.calendar = calendar;
         this.clock = clock;
@@ -66,10 +67,12 @@ public class DashboardController {
                 "eod", () -> {
                     eod.run(false);
                     tracker.update();
+                    holdingsCheck.run(false);
                 },
                 "positional", positional::run,
                 "btst", () -> btst.run(false),
-                "track", tracker::update);
+                "track", tracker::update,
+                "holdings", () -> holdingsCheck.run(true)); // on demand, e.g. right after adding a holding
     }
 
     @GetMapping("/dashboard")

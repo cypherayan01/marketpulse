@@ -70,6 +70,21 @@ class JdbcReportArchiveTest {
     }
 
     @Test
+    void holdingsCheckSurvivesARoundTrip() {
+        var holding = new com.marketpulse.holdings.Holding(3L, "TCS", 5, 3100, DAY.minusDays(40), TradeStyle.POSITIONAL,
+                null, 3600.0, Instant.parse("2026-10-01T10:00:00Z"));
+        var check = new com.marketpulse.holdings.HoldingCheck(holding, 3300, DAY, 6.45, 1000, 3150,
+                "trailing stop, 3 ATR below the highest close since you bought", com.marketpulse.holdings.Verdict.HOLD,
+                78, Classification.BULLISH, List.of("Above 40-week average"), List.of());
+        var report = new com.marketpulse.reports.HoldingsReport(Instant.parse("2026-11-11T11:05:00Z"), DAY,
+                List.of(check), List.of("GHOST"));
+
+        archive.saveHoldings(report);
+
+        assertThat(archive.loadHoldings()).contains(report);
+    }
+
+    @Test
     void emptyArchiveLoadsNothing() {
         assertThat(archive.loadScans()).isEmpty();
         assertThat(archive.loadBrief()).isEmpty();

@@ -1,6 +1,7 @@
 package com.marketpulse.persistence;
 
 import com.marketpulse.reports.BriefReport;
+import com.marketpulse.reports.HoldingsReport;
 import com.marketpulse.reports.NewsEntry;
 import com.marketpulse.reports.ReportArchive;
 import com.marketpulse.reports.ScanReport;
@@ -20,6 +21,7 @@ public class JdbcReportArchive implements ReportArchive {
 
     private static final String BRIEF = "BRIEF";
     private static final String NEWS = "NEWS";
+    private static final String HOLDINGS = "HOLDINGS";
 
     private final JdbcClient jdbc;
     private final JsonMapper json;
@@ -42,6 +44,16 @@ public class JdbcReportArchive implements ReportArchive {
     @Override
     public void saveNews(List<NewsEntry> news) {
         put(NEWS, json.writeValueAsString(news));
+    }
+
+    @Override
+    public void saveHoldings(HoldingsReport report) {
+        put(HOLDINGS, json.writeValueAsString(report));
+    }
+
+    @Override
+    public Optional<HoldingsReport> loadHoldings() {
+        return get(HOLDINGS).map(payload -> json.readValue(payload, HoldingsReport.class));
     }
 
     @Override

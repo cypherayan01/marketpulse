@@ -20,6 +20,7 @@ import com.marketpulse.swing.EodWatchlistService;
 import com.marketpulse.tracking.JdbcSignalRepository;
 import com.marketpulse.tracking.SignalRepository;
 import com.marketpulse.tracking.SignalTracker;
+import com.marketpulse.holdings.HoldingsCheckService;
 import com.marketpulse.tracking.TrackedSignal;
 import com.marketpulse.tracking.TradeStatus;
 import org.junit.jupiter.api.Test;
@@ -105,6 +106,7 @@ class DashboardControllerTest {
     @MockitoBean private PositionalScanService positional;
     @MockitoBean private BtstScanService btst;
     @MockitoBean private SignalTracker tracker;
+    @MockitoBean private HoldingsCheckService holdingsCheck;
 
     @Test
     void rejectsRequestsWithoutTheDashboardToken() throws Exception {
@@ -154,6 +156,13 @@ class DashboardControllerTest {
     @Test
     void trackRecordNeedsTheToken() throws Exception {
         mvc.perform(get("/api/performance")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void canCheckHoldingsFromTheDashboard() throws Exception {
+        mvc.perform(post("/api/run/holdings").header("Authorization", "Bearer dash-token"))
+                .andExpect(status().isAccepted());
+        verify(holdingsCheck, timeout(2000)).run(true);
     }
 
     @Test

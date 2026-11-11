@@ -100,6 +100,8 @@ class ReportStoreTest {
         @Override public java.util.List<ScanReport> loadScans() { return scans; }
         @Override public java.util.Optional<BriefReport> loadBrief() { return java.util.Optional.ofNullable(brief); }
         @Override public java.util.List<NewsEntry> loadNews() { return news; }
+        @Override public void saveHoldings(HoldingsReport report) { }
+        @Override public java.util.Optional<HoldingsReport> loadHoldings() { return java.util.Optional.empty(); }
     }
 
     private static ScanReport scan(TradeStyle style, String market) {

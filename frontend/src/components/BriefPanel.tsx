@@ -1,9 +1,9 @@
-import { istTime, number, signedPct } from '../format'
+import { istTime, number, signedPct, trendClass } from '../format'
 import type { BriefReport } from '../types'
 
 export function BriefPanel({ brief }: { brief: BriefReport | null }) {
   if (!brief) {
-    return <p className="empty">No brief yet - it is written at 8:30 AM IST on trading days.</p>
+    return <section className="panel"><p className="empty">No brief yet - it is written at 8:30 AM IST on trading days.</p></section>
   }
   return (
     <section className="panel">
@@ -16,7 +16,7 @@ export function BriefPanel({ brief }: { brief: BriefReport | null }) {
             <tr key={c.symbol}>
               <th scope="row">{c.name}</th>
               <td>{number(c.last)}</td>
-              <td className={c.changePct >= 0 ? 'up' : 'down'}>{signedPct(c.changePct)}</td>
+              <td className={trendClass(c.changePct)}>{signedPct(c.changePct)}</td>
             </tr>
           ))}
         </tbody>

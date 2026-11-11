@@ -30,6 +30,7 @@ public class ReportStore {
     private final Deque<NewsEntry> news = new ArrayDeque<>();
     private final List<Consumer<ScanReport>> scanListeners = new ArrayList<>();
     private BriefReport brief;
+    private HoldingsReport holdings;
 
     public ReportStore(int newsCapacity) {
         this(newsCapacity, ReportArchive.NONE);
@@ -41,6 +42,7 @@ public class ReportStore {
         try {
             archive.loadScans().forEach(s -> scans.put(s.style(), s));
             brief = archive.loadBrief().orElse(null);
+            holdings = archive.loadHoldings().orElse(null);
             archive.loadNews().stream().limit(newsCapacity).forEach(news::addLast);
         } catch (RuntimeException e) {
             log.warn("Could not restore saved reports, starting empty: {}", e.getMessage());
@@ -71,6 +73,15 @@ public class ReportStore {
 
     public synchronized Optional<BriefReport> latestBrief() {
         return Optional.ofNullable(brief);
+    }
+
+    public synchronized void saveHoldings(HoldingsReport report) {
+        holdings = report;
+        safely("archive holdings", () -> archive.saveHoldings(report));
+    }
+
+    public synchronized Optional<HoldingsReport> latestHoldings() {
+        return Optional.ofNullable(holdings);
     }
 
     public synchronized void addNews(NewsImpact impact, boolean alerted, Instant scoredAt) {

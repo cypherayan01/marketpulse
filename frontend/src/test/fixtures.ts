@@ -1,4 +1,4 @@
-import type { Dashboard, Performance, ScanReport, TradeSignal } from '../types'
+import type { Dashboard, HoldingsView, Performance, ScanReport, TradeSignal } from '../types'
 
 export const bullishSignal: TradeSignal = {
   symbol: 'HDFCBANK',
@@ -99,4 +99,29 @@ export const performance: Performance = {
     confidence: 'HIGH', entry: 100, stop: 95, target: 110, status: 'TARGET_HIT', exitDate: '2026-11-08', exitPrice: 110,
     returnPct: 10, maxGainPct: 11, maxLossPct: -1, sessionsHeld: 5,
   }],
+}
+
+const tcs = { id: 1, symbol: 'TCS', quantity: 5, buyPrice: 3100, buyDate: '2026-10-01', horizon: 'POSITIONAL' as const, stopLoss: null, target: 3600 }
+const axis = { id: 2, symbol: 'AXISBANK', quantity: 20, buyPrice: 1400, buyDate: '2026-11-03', horizon: 'SWING' as const, stopLoss: 1340, target: null }
+const infy = { id: 3, symbol: 'INFY', quantity: 10, buyPrice: 1150, buyDate: '2026-11-11', horizon: 'SWING' as const, stopLoss: null, target: null }
+
+export const holdingsView: HoldingsView = {
+  holdings: [axis, infy, tcs],
+  latestCheck: {
+    generatedAt: '2026-11-11T11:05:00Z',
+    session: '2026-11-11',
+    failed: [],
+    checks: [
+      {
+        holding: axis, price: 1336.4, priceDate: '2026-11-11', pnlPct: -4.54, pnlAmount: -1272, stop: 1340,
+        stopSource: 'your stop', verdict: 'EXIT', score: 40, trend: 'BEARISH',
+        reasons: ['Closed below your stop ₹1,340.00'], notes: [],
+      },
+      {
+        holding: tcs, price: 3300, priceDate: '2026-11-11', pnlPct: 6.45, pnlAmount: 1000, stop: 3150,
+        stopSource: 'trailing stop, 3 ATR below the highest close since you bought', verdict: 'HOLD', score: 78,
+        trend: 'BULLISH', reasons: ['Above 40-week average (long-term uptrend)'], notes: [],
+      },
+    ],
+  },
 }

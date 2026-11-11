@@ -40,6 +40,15 @@ describe('TrackRecordPanel', () => {
     expect(within(closed).getByText('+10.00%')).toBeInTheDocument()
   })
 
+  it('names the BTST style in capitals in the trade lists', () => {
+    const btstTrade = { ...performance.open[0], id: 5, style: 'BTST' as const, symbol: 'TRENT' }
+    render(<TrackRecordPanel performance={{ ...performance, open: [btstTrade] }} />)
+
+    const open = screen.getByRole('region', { name: 'Open paper trades' })
+    expect(within(open).getByText('BTST')).toBeInTheDocument()
+    expect(within(open).queryByText('Btst')).not.toBeInTheDocument()
+  })
+
   it('explains an empty style', () => {
     render(<TrackRecordPanel performance={performance} />)
 

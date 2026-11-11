@@ -33,6 +33,10 @@ import com.marketpulse.positional.PositionalCalculator;
 import com.marketpulse.positional.PositionalScanService;
 import com.marketpulse.positional.PositionalScorer;
 import com.marketpulse.positional.PositionalSettings;
+import com.marketpulse.holdings.HoldingEvaluator;
+import com.marketpulse.holdings.HoldingRepository;
+import com.marketpulse.holdings.HoldingsCheckService;
+import com.marketpulse.holdings.JdbcHoldingRepository;
 import com.marketpulse.persistence.JdbcReportArchive;
 import com.marketpulse.persistence.JdbcResultsDateRepository;
 import com.marketpulse.reports.ReportStore;
@@ -245,6 +249,21 @@ public class AppConfig {
         List<String> universe = props.btst().universe().isEmpty() ? props.swing().universe() : props.btst().universe();
         return new BtstScanService(yahoo, yahoo, new BtstCalculator(), new BtstScorer(), alertDispatcher, calendar,
                 clock, new BtstSettings(universe, props.swing().indexSymbol(), props.btst().topN()), store);
+    }
+
+    // ---------- Holdings health check ----------
+
+    @Bean
+    HoldingRepository holdingRepository(JdbcClient jdbc) {
+        return new JdbcHoldingRepository(jdbc);
+    }
+
+    @Bean
+    HoldingsCheckService holdingsCheckService(HoldingRepository holdings, YahooChartClient market,
+                                              EventCalendar calendar, AlertDispatcher alertDispatcher,
+                                              ReportStore store, Clock clock, MarketPulseProperties props) {
+        return new HoldingsCheckService(holdings, market, new HoldingEvaluator(), calendar, alertDispatcher, store,
+                clock, props.swing().indexSymbol());
     }
 
     private static RestClient.Builder restClientBuilder() {

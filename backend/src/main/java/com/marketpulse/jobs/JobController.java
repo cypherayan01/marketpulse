@@ -8,6 +8,7 @@ import com.marketpulse.news.NewsRunSummary;
 import com.marketpulse.positional.PositionalScanService;
 import com.marketpulse.swing.EodWatchlistService;
 import com.marketpulse.tracking.SignalTracker;
+import com.marketpulse.holdings.HoldingsCheckService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,19 +31,21 @@ public class JobController {
     private final PositionalScanService positionalScanService;
     private final BtstScanService btstScanService;
     private final SignalTracker signalTracker;
+    private final HoldingsCheckService holdingsCheck;
     private final BackgroundJobs background;
     private final String jobToken;
 
     public JobController(NewsAlertService newsAlertService, EodWatchlistService eodWatchlistService,
                          PreMarketBriefService preMarketBriefService, PositionalScanService positionalScanService,
-                         BtstScanService btstScanService, SignalTracker signalTracker, BackgroundJobs background,
-                         MarketPulseProperties props) {
+                         BtstScanService btstScanService, SignalTracker signalTracker,
+                         HoldingsCheckService holdingsCheck, BackgroundJobs background, MarketPulseProperties props) {
         this.newsAlertService = newsAlertService;
         this.eodWatchlistService = eodWatchlistService;
         this.preMarketBriefService = preMarketBriefService;
         this.positionalScanService = positionalScanService;
         this.btstScanService = btstScanService;
         this.signalTracker = signalTracker;
+        this.holdingsCheck = holdingsCheck;
         this.background = background;
         this.jobToken = props.jobToken();
     }
@@ -56,16 +59,24 @@ public class JobController {
     }
 
     /**
-     * After the close: the swing scan, then paper-trade tracking with the day's candles. Takes longer than
+     * After the close: the swing scan, paper-trade tracking, then your holdings check. Takes longer than
      * cron-job.org's timeout, so it runs in the background: 202 Accepted.
      */
     @PostMapping("/eod")
     public ResponseEntity<Void> runEod(@RequestHeader(value = "X-Job-Token", required = false) String token,
                                        @RequestParam(defaultValue = "false") boolean force) {
-        return start(token, "EOD scan + tracking", () -> {
+        return start(token, "EOD scan + tracking + holdings", () -> {
             eodWatchlistService.run(force);
             signalTracker.update();
+            holdingsCheck.run(force);
         });
+    }
+
+    /** Holdings check on its own (it also runs after every /jobs/eod). */
+    @PostMapping("/holdings")
+    public ResponseEntity<Void> runHoldings(@RequestHeader(value = "X-Job-Token", required = false) String token,
+                                            @RequestParam(defaultValue = "false") boolean force) {
+        return start(token, "Holdings check", () -> holdingsCheck.run(force));
     }
 
     /** Paper-trade tracking on its own (it also runs after every /jobs/eod). */

@@ -91,7 +91,7 @@ export interface Dashboard {
   events: MarketEvent[]
 }
 
-export type JobName = 'news' | 'premarket' | 'eod' | 'positional' | 'btst' | 'track'
+export type JobName = 'news' | 'premarket' | 'eod' | 'positional' | 'btst' | 'track' | 'holdings'
 
 export type TradeStatus = 'OPEN' | 'TARGET_HIT' | 'STOPPED' | 'EXPIRED'
 
@@ -144,4 +144,40 @@ export interface Performance {
   styles: StyleStats[]
   open: TrackedSignal[]
   recentClosed: TrackedSignal[]
+}
+
+export type Horizon = 'SWING' | 'POSITIONAL'
+export type Verdict = 'EXIT' | 'REVIEW' | 'HOLD'
+
+export interface Holding {
+  id: number
+  symbol: string
+  quantity: number
+  buyPrice: number
+  buyDate: string
+  horizon: Horizon
+  stopLoss: number | null
+  target: number | null
+}
+
+export type NewHolding = Omit<Holding, 'id'>
+
+export interface HoldingCheck {
+  holding: Holding
+  price: number
+  priceDate: string
+  pnlPct: number
+  pnlAmount: number
+  stop: number
+  stopSource: string
+  verdict: Verdict
+  score: number
+  trend: Classification
+  reasons: string[]
+  notes: string[]
+}
+
+export interface HoldingsView {
+  holdings: Holding[]
+  latestCheck: { generatedAt: string; session: string; checks: HoldingCheck[]; failed: string[] } | null
 }

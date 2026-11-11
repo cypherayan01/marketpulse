@@ -1,4 +1,4 @@
-import { label, rupees, shortDate, signedPct } from '../format'
+import { rupees, shortDate, signedPct, styleName, trendClass } from '../format'
 import type { Performance, StyleStats, TradeStatus } from '../types'
 
 const MEANINGFUL_SAMPLE = 30
@@ -28,13 +28,13 @@ export function TrackRecordPanel({ performance }: { performance: Performance | n
             <tbody>
               {performance.open.map((t) => (
                 <tr key={t.id}>
-                  <td><strong>{t.symbol}</strong> <span className="footnote">{label(t.style)}</span></td>
-                  <td>{shortDate(t.signalDate)}</td>
-                  <td>{rupees(t.entry)}</td>
-                  <td>{rupees(t.stop)}</td>
-                  <td>{rupees(t.target)}</td>
-                  <td>{t.sessionsHeld}</td>
-                  <td>{signedPct(t.maxGainPct)} / {signedPct(t.maxLossPct)}</td>
+                  <td data-label="Stock"><strong>{t.symbol}</strong> <span className="footnote">{styleName(t.style)}</span></td>
+                  <td data-label="Since">{shortDate(t.signalDate)}</td>
+                  <td data-label="Entry">{rupees(t.entry)}</td>
+                  <td data-label="Stop">{rupees(t.stop)}</td>
+                  <td data-label="Target">{rupees(t.target)}</td>
+                  <td data-label="Days">{t.sessionsHeld}</td>
+                  <td data-label="Best / worst">{signedPct(t.maxGainPct)} / {signedPct(t.maxLossPct)}</td>
                 </tr>
               ))}
             </tbody>
@@ -50,11 +50,11 @@ export function TrackRecordPanel({ performance }: { performance: Performance | n
             <tbody>
               {performance.recentClosed.map((t) => (
                 <tr key={t.id}>
-                  <td><strong>{t.symbol}</strong> <span className="footnote">{label(t.style)}</span></td>
-                  <td>{shortDate(t.signalDate)} · {t.score}</td>
-                  <td>{t.exitDate && shortDate(t.exitDate)}</td>
-                  <td>{STATUS[t.status]}</td>
-                  <td className={(t.returnPct ?? 0) > 0 ? 'up' : 'down'}>{signedPct(t.returnPct ?? 0)}</td>
+                  <td data-label="Stock"><strong>{t.symbol}</strong> <span className="footnote">{styleName(t.style)}</span></td>
+                  <td data-label="Signal">{shortDate(t.signalDate)} · {t.score}</td>
+                  <td data-label="Exit">{t.exitDate && shortDate(t.exitDate)}</td>
+                  <td data-label="Outcome">{STATUS[t.status]}</td>
+                  <td data-label="Return" className={trendClass(t.returnPct ?? 0)}>{signedPct(t.returnPct ?? 0)}</td>
                 </tr>
               ))}
             </tbody>
@@ -66,7 +66,7 @@ export function TrackRecordPanel({ performance }: { performance: Performance | n
 }
 
 function StyleCard({ stats }: { stats: StyleStats }) {
-  const name = stats.style === 'BTST' ? 'BTST' : label(stats.style)
+  const name = styleName(stats.style)
   return (
     <section className="card" aria-label={`${name} track record`}>
       <h3>{name}</h3>
@@ -76,7 +76,7 @@ function StyleCard({ stats }: { stats: StyleStats }) {
         <>
           <dl className="plan">
             <div><dt>Win rate</dt><dd aria-label="Win rate">{Math.round(stats.winRatePct)}%</dd></div>
-            <div><dt>Avg per trade</dt><dd aria-label="Average return per trade" className={stats.avgReturnPct > 0 ? 'up' : 'down'}>{signedPct(stats.avgReturnPct)}</dd></div>
+            <div><dt>Avg per trade</dt><dd aria-label="Average return per trade" className={trendClass(stats.avgReturnPct)}>{signedPct(stats.avgReturnPct)}</dd></div>
             <div><dt>Closed / open</dt><dd>{stats.closed} / {stats.open}</dd></div>
           </dl>
           <p className="meta">avg win {signedPct(stats.avgWinPct)} · avg loss {signedPct(stats.avgLossPct)}</p>

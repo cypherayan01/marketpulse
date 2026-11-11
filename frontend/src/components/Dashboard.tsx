@@ -1,25 +1,29 @@
 import { useState } from 'react'
 import { istTime } from '../format'
-import type { Dashboard as DashboardData, JobName, Performance } from '../types'
+import type { Dashboard as DashboardData, HoldingsView, JobName, NewHolding, Performance } from '../types'
 import { BriefPanel } from './BriefPanel'
 import { EventsPanel } from './EventsPanel'
+import { HoldingsPanel } from './HoldingsPanel'
 import { NewsPanel } from './NewsPanel'
 import { ScanPanel } from './ScanPanel'
 import { TrackRecordPanel } from './TrackRecordPanel'
 
-const TABS = ['Overview', 'Swing', 'Positional', 'BTST', 'News', 'Events', 'Track record'] as const
+const TABS = ['Overview', 'My holdings', 'Swing', 'Positional', 'BTST', 'News', 'Events', 'Track record'] as const
 type Tab = (typeof TABS)[number]
 
 interface Props {
   data: DashboardData
   performance: Performance | null
+  holdings: HoldingsView | null
+  onAddHolding: (holding: NewHolding) => Promise<void>
+  onDeleteHolding: (id: number) => Promise<void>
   onRun: (job: JobName) => void
   onRefresh: () => void
   onLogout: () => void
   status?: string
 }
 
-export function Dashboard({ data, performance, onRun, onRefresh, onLogout, status }: Props) {
+export function Dashboard({ data, performance, holdings, onAddHolding, onDeleteHolding, onRun, onRefresh, onLogout, status }: Props) {
   const [tab, setTab] = useState<Tab>('Overview')
 
   return (
@@ -42,6 +46,9 @@ export function Dashboard({ data, performance, onRun, onRefresh, onLogout, statu
 
       <main role="tabpanel" aria-label={tab}>
         {tab === 'Overview' && <Overview data={data} />}
+        {tab === 'My holdings' && (
+          <HoldingsPanel view={holdings} onAdd={onAddHolding} onDelete={onDeleteHolding} onCheck={() => onRun('holdings')} />
+        )}
         {tab === 'Swing' && <ScanPanel title="Swing" job="eod" report={data.swing} onRun={onRun} />}
         {tab === 'Positional' && <ScanPanel title="Positional" job="positional" report={data.positional} onRun={onRun} />}
         {tab === 'BTST' && <ScanPanel title="BTST" job="btst" report={data.btst} onRun={onRun} />}

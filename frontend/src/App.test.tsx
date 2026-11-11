@@ -3,12 +3,15 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { UnauthorizedError, UnavailableError, type Api } from './api'
 import App from './App'
-import { dashboard, performance } from './test/fixtures'
+import { dashboard, holdingsView, performance } from './test/fixtures'
 
 function fakeApi(overrides: Partial<Api> = {}): Api {
   return {
     getDashboard: vi.fn().mockResolvedValue(dashboard),
     getPerformance: vi.fn().mockResolvedValue(performance),
+    getHoldings: vi.fn().mockResolvedValue(holdingsView),
+    addHolding: vi.fn().mockResolvedValue({ ...holdingsView.holdings[0], id: 9, symbol: 'HDFCBANK' }),
+    deleteHolding: vi.fn().mockResolvedValue(undefined),
     runJob: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   }
@@ -84,6 +87,24 @@ describe('App', () => {
 
     expect(screen.getByRole('region', { name: 'Swing track record' })).toBeInTheDocument()
     expect(api.getPerformance).toHaveBeenCalledWith('secret')
+  })
+
+  it('adds a holding, reloads the list and starts a check', async () => {
+    localStorage.setItem('marketpulse.token', 'secret')
+    const api = fakeApi()
+    render(<App api={api} />)
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'My holdings' }))
+    await userEvent.type(screen.getByLabelText('Symbol'), 'HDFCBANK')
+    await userEvent.type(screen.getByLabelText('Quantity'), '15')
+    await userEvent.type(screen.getByLabelText('Buy price'), '806.6')
+    await userEvent.type(screen.getByLabelText('Buy date'), '2026-11-11')
+    await userEvent.click(screen.getByRole('button', { name: 'Add holding' }))
+
+    await waitFor(() => expect(api.runJob).toHaveBeenCalledWith('secret', 'holdings'))
+    expect(api.addHolding).toHaveBeenCalledWith('secret', expect.objectContaining({ symbol: 'HDFCBANK' }))
+    expect(api.getHoldings).toHaveBeenCalledTimes(2) // initial load + after adding
+    expect(screen.getByRole('status')).toHaveTextContent(/added HDFCBANK/i)
   })
 
   it('logs out', async () => {
