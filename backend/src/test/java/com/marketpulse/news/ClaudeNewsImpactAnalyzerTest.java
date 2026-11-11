@@ -5,6 +5,7 @@ import com.marketpulse.news.ClaudeNewsImpactAnalyzer.ImpactReport;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,8 +32,8 @@ class ClaudeNewsImpactAnalyzerTest {
     @Test
     void mapsAssessmentsBackToNewsItemsByIndex() {
         ImpactReport report = new ImpactReport(List.of(
-                new HeadlineAssessment(1, 3, Direction.NEUTRAL, List.of("Energy"), List.of(), "Minor move"),
-                new HeadlineAssessment(0, 9, Direction.BULLISH, List.of("Banking"), List.of("HDFCBANK"), "Cheaper credit")));
+                new HeadlineAssessment(1, 3, Direction.NEUTRAL, List.of("Energy"), List.of(), "Minor move", "", ""),
+                new HeadlineAssessment(0, 9, Direction.BULLISH, List.of("Banking"), List.of("HDFCBANK"), "Cheaper credit", "", "")));
 
         List<NewsImpact> impacts = ClaudeNewsImpactAnalyzer.toImpacts(items, report);
 
@@ -46,13 +47,35 @@ class ClaudeNewsImpactAnalyzerTest {
     @Test
     void ignoresUnknownIndexesAndClampsScores() {
         ImpactReport report = new ImpactReport(List.of(
-                new HeadlineAssessment(7, 9, Direction.BULLISH, List.of(), List.of(), "hallucinated index"),
-                new HeadlineAssessment(0, 15, Direction.BULLISH, null, null, "too high")));
+                new HeadlineAssessment(7, 9, Direction.BULLISH, List.of(), List.of(), "hallucinated index", "", ""),
+                new HeadlineAssessment(0, 15, Direction.BULLISH, null, null, "too high", null, null)));
 
         List<NewsImpact> impacts = ClaudeNewsImpactAnalyzer.toImpacts(items, report);
 
         assertThat(impacts).hasSize(1);
         assertThat(impacts.getFirst().impactScore()).isEqualTo(10);
         assertThat(impacts.getFirst().sectors()).isEmpty();
+    }
+
+    @Test
+    void extractsAnnouncedResultsDate() {
+        ImpactReport report = new ImpactReport(List.of(
+                new HeadlineAssessment(0, 4, Direction.NEUTRAL, List.of("IT"), List.of("TCS"), "Date set",
+                        "tcs", "2027-01-09")));
+
+        NewsImpact impact = ClaudeNewsImpactAnalyzer.toImpacts(items, report).getFirst();
+
+        assertThat(impact.results()).isEqualTo(new ResultsAnnouncement("TCS", LocalDate.of(2027, 1, 9)));
+    }
+
+    @Test
+    void ignoresMissingOrMalformedResultsDate() {
+        ImpactReport report = new ImpactReport(List.of(
+                new HeadlineAssessment(0, 4, Direction.NEUTRAL, List.of(), List.of(), "r", "TCS", "next week"),
+                new HeadlineAssessment(1, 4, Direction.NEUTRAL, List.of(), List.of(), "r", "", "")));
+
+        List<NewsImpact> impacts = ClaudeNewsImpactAnalyzer.toImpacts(items, report);
+
+        assertThat(impacts).allMatch(i -> i.results() == null);
     }
 }

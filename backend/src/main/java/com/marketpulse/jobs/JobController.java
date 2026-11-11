@@ -1,5 +1,6 @@
 package com.marketpulse.jobs;
 
+import com.marketpulse.brief.PreMarketBriefService;
 import com.marketpulse.config.MarketPulseProperties;
 import com.marketpulse.news.NewsAlertService;
 import com.marketpulse.news.NewsRunSummary;
@@ -32,14 +33,16 @@ public class JobController {
 
     private final NewsAlertService newsAlertService;
     private final EodWatchlistService eodWatchlistService;
+    private final PreMarketBriefService preMarketBriefService;
     private final byte[] jobToken;
     /** Long scans run here so the scheduler's HTTP call returns immediately; one at a time. */
     private final ExecutorService background = Executors.newSingleThreadExecutor();
 
     public JobController(NewsAlertService newsAlertService, EodWatchlistService eodWatchlistService,
-                         MarketPulseProperties props) {
+                         PreMarketBriefService preMarketBriefService, MarketPulseProperties props) {
         this.newsAlertService = newsAlertService;
         this.eodWatchlistService = eodWatchlistService;
+        this.preMarketBriefService = preMarketBriefService;
         this.jobToken = props.jobToken() == null ? new byte[0] : props.jobToken().getBytes(StandardCharsets.UTF_8);
     }
 
@@ -58,11 +61,25 @@ public class JobController {
         if (!authorized(token)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
+        return runInBackground("EOD scan", () -> eodWatchlistService.run(force));
+    }
+
+    /** Fetches global cues and asks Claude to write the brief (can take ~30-60 s), so it runs in the background. */
+    @PostMapping("/premarket")
+    public ResponseEntity<Void> runPremarket(@RequestHeader(value = "X-Job-Token", required = false) String token,
+                                             @RequestParam(defaultValue = "false") boolean force) {
+        if (!authorized(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        return runInBackground("Pre-market brief", () -> preMarketBriefService.run(force));
+    }
+
+    private ResponseEntity<Void> runInBackground(String name, Runnable job) {
         background.submit(() -> {
             try {
-                eodWatchlistService.run(force);
+                job.run();
             } catch (RuntimeException e) {
-                log.error("EOD scan failed", e);
+                log.error("{} failed", name, e);
             }
         });
         return ResponseEntity.accepted().build();

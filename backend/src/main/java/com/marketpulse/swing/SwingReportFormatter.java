@@ -1,9 +1,13 @@
 package com.marketpulse.swing;
 
+import com.marketpulse.events.MarketEvent;
+
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import static com.marketpulse.swing.SwingScorer.rupees;
 
@@ -11,6 +15,8 @@ import static com.marketpulse.swing.SwingScorer.rupees;
 final class SwingReportFormatter {
 
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH);
+    private static final DateTimeFormatter SHORT_DAY = DateTimeFormatter.ofPattern("dd MMM", Locale.ENGLISH);
+    private static final DateTimeFormatter EVENT_DAY = DateTimeFormatter.ofPattern("EEE dd MMM", Locale.ENGLISH);
 
     private SwingReportFormatter() {
     }
@@ -20,6 +26,7 @@ final class SwingReportFormatter {
     }
 
     static String body(EodWatchlistService.MarketContext market, List<SwingSignal> bullish, List<SwingSignal> bearish,
+                       Map<String, MarketEvent> resultsSoon, List<MarketEvent> events, LocalDate today,
                        int scanned, List<String> failed) {
         StringBuilder sb = new StringBuilder();
         sb.append(String.format(Locale.ENGLISH, "Market: Nifty %,.2f (%+.2f%% today) · %s%n%n", market.close(), market.dayChangePct(), marketMood(market)));
@@ -38,6 +45,11 @@ final class SwingReportFormatter {
             if (!s.bearishFactors().isEmpty()) {
                 sb.append("   ⚠️ Watch: ").append(String.join("; ", s.bearishFactors())).append('\n');
             }
+            MarketEvent results = resultsSoon.get(s.symbol());
+            if (results != null) {
+                sb.append("   ⚠️ Results on %s (in %d days) - a results surprise can break any setup%n".formatted(
+                        SHORT_DAY.format(results.date()), ChronoUnit.DAYS.between(today, results.date())));
+            }
             sb.append("   Invalidated if: ").append(s.invalidation()).append('\n');
         }
 
@@ -50,6 +62,13 @@ final class SwingReportFormatter {
             sb.append("\n%d. %s - %d/100 %s · close %s%n".formatted(n++, s.symbol(), s.score(),
                     s.classification().label(), rupees(s.snapshot().close())));
             sb.append("   Why: ").append(String.join("; ", s.bearishFactors().stream().limit(4).toList())).append('\n');
+        }
+
+        if (!events.isEmpty()) {
+            sb.append("\n📅 UPCOMING EVENTS (next 7 days)\n");
+            for (MarketEvent e : events) {
+                sb.append("- %s · %s [%s]%n".formatted(EVENT_DAY.format(e.date()), e.title(), e.impact()));
+            }
         }
 
         sb.append("\nScanned %d stocks".formatted(scanned));

@@ -114,6 +114,8 @@ marketpulse:
       - q3
       - q4
       - quarterly results
+      - board meeting
+      - results date
       - net profit
       - guidance
       - merger
@@ -147,3 +149,43 @@ marketpulse:
                POWERGRID, ONGC, TATASTEEL, ASIANPAINT, ADANIENT, ADANIPORTS, BAJAJFINSV, WIPRO, NESTLEIND, COALINDIA,
                JSWSTEEL, GRASIM, TECHM, HINDALCO, DRREDDY, CIPLA, SBILIFE, HDFCLIFE, EICHERMOT, APOLLOHOSP,
                TATACONSUM, BAJAJ-AUTO, SHRIRAMFIN, BEL, TRENT, INDIGO, ETERNAL, JIOFIN, TMPV, MAXHEALTH]
+    results-warning-days: 15   # warn when a setup has results inside your typical holding period
+
+  events:
+    # NSE trading holidays - no brief or EOD scan on these days. Update each year from nseindia.com.
+    # (2027 list not published yet as of Nov 2026.)
+    holidays: [2026-11-24, 2026-12-25]
+    # Macro events. Fed decisions land around midnight IST, so India reacts the next morning.
+    macro:
+      - { date: 2026-12-04, title: "RBI monetary policy decision", impact: HIGH }
+      - { date: 2026-12-09, title: "US Fed rate decision (announced ~00:30 IST on 10 Dec)", impact: HIGH }
+      - { date: 2027-01-27, title: "US Fed rate decision (announced ~00:30 IST next day)", impact: HIGH }
+      - { date: 2027-02-01, title: "Union Budget 2027-28", impact: HIGH }
+      - { date: 2027-02-05, title: "RBI monetary policy decision", impact: HIGH }
+      - { date: 2027-03-17, title: "US Fed rate decision (announced ~23:30 IST)", impact: HIGH }
+      - { date: 2027-04-28, title: "US Fed rate decision (announced ~23:30 IST)", impact: HIGH }
+      - { date: 2027-06-09, title: "US Fed rate decision (announced ~23:30 IST)", impact: HIGH }
+      - { date: 2027-07-28, title: "US Fed rate decision (announced ~23:30 IST)", impact: HIGH }
+      - { date: 2027-09-15, title: "US Fed rate decision (announced ~23:30 IST)", impact: HIGH }
+      - { date: 2027-10-27, title: "US Fed rate decision (announced ~23:30 IST)", impact: HIGH }
+    # Manual results dates (board meetings). Dates found in news headlines are added automatically.
+    # Example: - { symbol: TCS, date: 2027-01-08 }
+    results: []
+
+  brief:
+    max-headlines: 40   # most recent relevant overnight headlines given to Claude
+    event-days: 3       # events from today to 3 days ahead
+    cues:
+      - { name: "S&P 500", symbol: "^GSPC" }
+      - { name: "Nasdaq", symbol: "^IXIC" }
+      - { name: "Dow Jones", symbol: "^DJI" }
+      - { name: "Nikkei 225", symbol: "^N225" }
+      - { name: "Hang Seng", symbol: "^HSI" }
+      - { name: "Brent crude ($)", symbol: "BZ=F" }
+      - { name: "Gold ($)", symbol: "GC=F" }
+      - { name: "US Dollar Index", symbol: "DX-Y.NYB" }
+      - { name: "USD/INR", symbol: "INR=X" }
+      - { name: "US 10Y yield (%)", symbol: "^TNX" }
+      - { name: "India VIX", symbol: "^INDIAVIX" }
+      - { name: "Nifty 50 (prev close)", symbol: "^NSEI" }
+      - { name: "Bank Nifty (prev close)", symbol: "^NSEBANK" }

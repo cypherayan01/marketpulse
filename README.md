@@ -36,15 +36,40 @@ Scoring rules are documented on `SwingScorer` and specified by `SwingScorerTest`
 Bearish stocks get no trade plan: overnight shorts aren't possible in the cash market.
 Stock list: `marketpulse.swing.universe` in `application.yml`.
 
+## Phase 3: Pre-market brief + event calendar (done)
+
+```
+cron-job.org (Mon-Fri 08:30 IST)
+   └─ POST /jobs/premarket → 202, runs in background (~30-60 s)
+        → skip weekends and NSE holidays (marketpulse.events.holidays) unless ?force=true
+        → global cues from Yahoo (US, Asia, crude, gold, dollar, INR, US 10Y, India VIX, Nifty)
+          with % change computed by the app
+        → relevant headlines since the previous session's 15:30 IST close
+        → events from the calendar (today + 3 days)
+        → Claude Opus 5.5 writes the brief from ONLY those facts (server-side refusal fallback on)
+        → exact numbers appended below; if Claude fails, a numbers-only brief is still sent
+```
+
+**Event calendar** (`marketpulse.events` in `application.yml`):
+- `macro`: RBI / Fed / Budget dates (seeded through Oct 2027 - add CPI etc. as you like)
+- `results`: manual results dates, e.g. `- { symbol: TCS, date: 2027-01-08 }`
+- results dates announced in news ("X board meeting on <date> to consider results") are
+  extracted by Haiku automatically - kept in memory, so they're lost on restart/redeploy
+- `holidays`: NSE trading holidays - **add the 2027 list when NSE publishes it**
+
+The swing report now warns `⚠️ Results on 17 Nov (in 6 days)` for setups with results inside
+`results-warning-days` (15), and lists the next 7 days' events.
+
 ## Run locally
 
 ```bash
 cd backend
-./mvnw test                                   # 60 tests
+./mvnw test                                   # 87 tests
 ./mvnw -DskipTests package
 JOB_TOKEN=local-test ANTHROPIC_API_KEY=sk-ant-... java -jar target/backend-0.0.1-SNAPSHOT.jar
 curl -X POST -H "X-Job-Token: local-test" localhost:8080/jobs/news
-curl -X POST -H "X-Job-Token: local-test" "localhost:8080/jobs/eod?force=true"   # report appears in the log
+curl -X POST -H "X-Job-Token: local-test" "localhost:8080/jobs/eod?force=true"        # report appears in the log
+curl -X POST -H "X-Job-Token: local-test" "localhost:8080/jobs/premarket?force=true"  # uses one Opus call
 ```
 
 Without Telegram/email configured, alerts are printed to the log.
@@ -70,9 +95,9 @@ The default sender `onboarding@resend.dev` can only email the address you signed
    - header `X-Job-Token: <JOB_TOKEN>`
    - every 15 minutes, timeout 60s+ (first call after sleep takes ~1 min to wake Render)
    - second job: `POST /jobs/eod`, same header, **Mon-Fri 16:30, timezone Asia/Kolkata**
+   - third job: `POST /jobs/premarket`, same header, **Mon-Fri 08:30, timezone Asia/Kolkata**
 4. Anthropic Console → set a monthly spend limit.
 
 ## Next phases
 
-3. Pre-market brief + event calendar (Claude Opus 5.5)
 4. Positional weekly scan · 5. BTST 3 PM scan · 6. React dashboard on Vercel · 7. Signal tracking / paper trading

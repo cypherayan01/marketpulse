@@ -1,5 +1,6 @@
 package com.marketpulse.jobs;
 
+import com.marketpulse.brief.PreMarketBriefService;
 import com.marketpulse.config.MarketPulseProperties;
 import com.marketpulse.news.NewsAlertService;
 import com.marketpulse.news.NewsRunSummary;
@@ -33,6 +34,9 @@ class JobControllerTest {
 
     @MockitoBean
     private EodWatchlistService eodWatchlistService;
+
+    @MockitoBean
+    private PreMarketBriefService preMarketBriefService;
 
     @Test
     void rejectsRequestWithoutToken() throws Exception {
@@ -76,5 +80,18 @@ class JobControllerTest {
                 .andExpect(status().isAccepted());
 
         verify(eodWatchlistService, timeout(2000)).run(true);
+    }
+
+    @Test
+    void premarketJobRequiresToken() throws Exception {
+        mvc.perform(post("/jobs/premarket")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void premarketJobIsAcceptedAndRunsInBackground() throws Exception {
+        mvc.perform(post("/jobs/premarket").header("X-Job-Token", "test-token"))
+                .andExpect(status().isAccepted());
+
+        verify(preMarketBriefService, timeout(2000)).run(false);
     }
 }

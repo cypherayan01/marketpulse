@@ -1,6 +1,9 @@
 package com.marketpulse.news;
 
 import com.marketpulse.alerts.AlertDispatcher;
+import com.marketpulse.events.EventCalendar;
+import com.marketpulse.events.MarketEvent;
+import com.marketpulse.events.Source;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,6 +16,7 @@ import java.util.Map;
 
 /**
  * One news-poll run: fetch → keep fresh & unseen → keyword filter → AI impact analysis → alert on high impact.
+ * Results dates announced in headlines are recorded in the {@link EventCalendar}.
  */
 public class NewsAlertService {
 
@@ -23,17 +27,19 @@ public class NewsAlertService {
     private final SeenNewsRegistry seen;
     private final NewsImpactAnalyzer analyzer;
     private final AlertDispatcher dispatcher;
+    private final EventCalendar calendar;
     private final Clock clock;
     private final NewsAlertSettings settings;
 
     public NewsAlertService(List<NewsSource> sources, NewsRelevanceFilter filter, SeenNewsRegistry seen,
-                            NewsImpactAnalyzer analyzer, AlertDispatcher dispatcher, Clock clock,
-                            NewsAlertSettings settings) {
+                            NewsImpactAnalyzer analyzer, AlertDispatcher dispatcher, EventCalendar calendar,
+                            Clock clock, NewsAlertSettings settings) {
         this.sources = sources;
         this.filter = filter;
         this.seen = seen;
         this.analyzer = analyzer;
         this.dispatcher = dispatcher;
+        this.calendar = calendar;
         this.clock = clock;
         this.settings = settings;
     }
@@ -94,6 +100,10 @@ public class NewsAlertService {
         int alerted = 0;
         for (NewsImpact impact : impacts) {
             log.info("Scored {}/10 {} - {}", impact.impactScore(), impact.direction(), impact.item().title());
+            if (impact.results() != null) {
+                log.info("Results date from news: {} on {}", impact.results().symbol(), impact.results().date());
+                calendar.add(MarketEvent.results(impact.results().date(), impact.results().symbol(), Source.NEWS));
+            }
             if (impact.impactScore() >= settings.impactThreshold() && dispatcher.dispatch(impact)) {
                 alerted++;
             }

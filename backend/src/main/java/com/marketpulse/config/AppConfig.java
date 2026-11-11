@@ -7,6 +7,15 @@ import com.marketpulse.alerts.LoggingNotifier;
 import com.marketpulse.alerts.Notifier;
 import com.marketpulse.alerts.ResendEmailNotifier;
 import com.marketpulse.alerts.TelegramNotifier;
+import com.marketpulse.brief.BriefSettings;
+import com.marketpulse.brief.BriefWriter;
+import com.marketpulse.brief.ClaudeBriefWriter;
+import com.marketpulse.brief.CueDefinition;
+import com.marketpulse.brief.PreMarketBriefService;
+import com.marketpulse.events.EventCalendar;
+import com.marketpulse.events.Impact;
+import com.marketpulse.events.MarketEvent;
+import com.marketpulse.events.Source;
 import com.marketpulse.market.MarketDataClient;
 import com.marketpulse.market.YahooChartClient;
 import com.marketpulse.news.ClaudeNewsImpactAnalyzer;
@@ -33,7 +42,10 @@ import java.net.http.HttpClient;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 
 @Configuration
 @EnableConfigurationProperties(MarketPulseProperties.class)
@@ -47,41 +59,36 @@ public class AppConfig {
         return Clock.systemUTC();
     }
 
-    @Bean
-    NewsAlertService newsAlertService(MarketPulseProperties props, NewsImpactAnalyzer analyzer,
-                                      AlertDispatcher alertDispatcher, Clock clock) {
-        MarketPulseProperties.News news = props.news();
-        RestClient feedClient = restClientBuilder()
-                .defaultHeader("User-Agent", USER_AGENT)
-                .build();
-        List<NewsSource> sources = news.feeds().stream()
-                .<NewsSource>map(f -> new RssNewsSource(f.name(), f.url(), feedClient))
-                .toList();
-        log.info("News alerter configured with {} feeds, threshold {}/10", sources.size(), news.impactThreshold());
+    /** Holder beans: Spring treats List<T> and Optional<T> injection points specially, so wrap them. */
+    record NewsFeeds(List<NewsSource> sources) {
+    }
 
-        return new NewsAlertService(
-                sources,
-                new NewsRelevanceFilter(news.keywords(), news.watchlist()),
-                new SeenNewsRegistry(5_000),
-                analyzer,
-                alertDispatcher,
-                clock,
-                new NewsAlertSettings(news.lookback(), news.impactThreshold(), news.batchSize()));
+    record Claude(Optional<AnthropicClient> client) {
+    }
+
+    // ---------- shared building blocks ----------
+
+    @Bean
+    NewsFeeds newsFeeds(MarketPulseProperties props) {
+        RestClient feedClient = restClientBuilder().defaultHeader("User-Agent", USER_AGENT).build();
+        return new NewsFeeds(props.news().feeds().stream()
+                .<NewsSource>map(f -> new RssNewsSource(f.name(), f.url(), feedClient))
+                .toList());
     }
 
     @Bean
-    NewsImpactAnalyzer newsImpactAnalyzer(MarketPulseProperties props) {
-        String apiKey = MarketPulseProperties.hasText(props.claude().apiKey())
-                ? props.claude().apiKey()
-                : System.getenv("ANTHROPIC_API_KEY");
-        if (!MarketPulseProperties.hasText(apiKey)) {
-            log.warn("No Claude API key configured (ANTHROPIC_API_KEY) - news analysis is disabled");
-            return items -> {
-                throw new IllegalStateException("ANTHROPIC_API_KEY is not set");
-            };
-        }
-        AnthropicClient client = AnthropicOkHttpClient.builder().apiKey(apiKey).build();
-        return new ClaudeNewsImpactAnalyzer(client, props.claude().triageModel());
+    NewsRelevanceFilter newsRelevanceFilter(MarketPulseProperties props) {
+        return new NewsRelevanceFilter(props.news().keywords(), props.news().watchlist());
+    }
+
+    @Bean
+    EventCalendar eventCalendar(MarketPulseProperties props) {
+        List<MarketEvent> seed = new ArrayList<>();
+        props.events().macro().forEach(e -> seed.add(
+                MarketEvent.macro(e.date(), e.title(), Impact.valueOf(e.impact().toUpperCase(Locale.ROOT)))));
+        props.events().results().forEach(r -> seed.add(MarketEvent.results(r.date(), r.symbol(), Source.CONFIG)));
+        log.info("Event calendar seeded with {} events", seed.size());
+        return new EventCalendar(seed);
     }
 
     @Bean
@@ -89,13 +96,17 @@ public class AppConfig {
         return new YahooChartClient(restClientBuilder().defaultHeader("User-Agent", USER_AGENT));
     }
 
+    /** Empty when no API key is configured - AI features then degrade gracefully. */
     @Bean
-    EodWatchlistService eodWatchlistService(MarketPulseProperties props, MarketDataClient market,
-                                            AlertDispatcher alertDispatcher, Clock clock) {
-        MarketPulseProperties.Swing swing = props.swing();
-        log.info("Swing scanner configured with {} stocks", swing.universe().size());
-        return new EodWatchlistService(market, new IndicatorCalculator(), new SwingScorer(), alertDispatcher, clock,
-                new SwingSettings(swing.universe(), swing.indexSymbol(), swing.topN()));
+    Claude claude(MarketPulseProperties props) {
+        String apiKey = MarketPulseProperties.hasText(props.claude().apiKey())
+                ? props.claude().apiKey()
+                : System.getenv("ANTHROPIC_API_KEY");
+        if (!MarketPulseProperties.hasText(apiKey)) {
+            log.warn("No Claude API key configured (ANTHROPIC_API_KEY) - news analysis and AI briefs are disabled");
+            return new Claude(Optional.empty());
+        }
+        return new Claude(Optional.of(AnthropicOkHttpClient.builder().apiKey(apiKey).build()));
     }
 
     @Bean
@@ -113,6 +124,54 @@ public class AppConfig {
             notifiers.add(new LoggingNotifier());
         }
         return new AlertDispatcher(notifiers);
+    }
+
+    // ---------- Phase 1: news alerts ----------
+
+    @Bean
+    NewsImpactAnalyzer newsImpactAnalyzer(Claude claude, MarketPulseProperties props) {
+        return claude.client().<NewsImpactAnalyzer>map(c -> new ClaudeNewsImpactAnalyzer(c, props.claude().triageModel()))
+                .orElse(items -> {
+                    throw new IllegalStateException("ANTHROPIC_API_KEY is not set");
+                });
+    }
+
+    @Bean
+    NewsAlertService newsAlertService(MarketPulseProperties props, NewsFeeds feeds,
+                                      NewsRelevanceFilter filter, NewsImpactAnalyzer analyzer,
+                                      AlertDispatcher alertDispatcher, EventCalendar calendar, Clock clock) {
+        MarketPulseProperties.News news = props.news();
+        log.info("News alerter configured with {} feeds, threshold {}/10", feeds.sources().size(), news.impactThreshold());
+        return new NewsAlertService(feeds.sources(), filter, new SeenNewsRegistry(5_000), analyzer, alertDispatcher,
+                calendar, clock, new NewsAlertSettings(news.lookback(), news.impactThreshold(), news.batchSize()));
+    }
+
+    // ---------- Phase 2: swing watchlist ----------
+
+    @Bean
+    EodWatchlistService eodWatchlistService(MarketPulseProperties props, MarketDataClient market,
+                                            AlertDispatcher alertDispatcher, EventCalendar calendar, Clock clock) {
+        MarketPulseProperties.Swing swing = props.swing();
+        log.info("Swing scanner configured with {} stocks", swing.universe().size());
+        return new EodWatchlistService(market, new IndicatorCalculator(), new SwingScorer(), alertDispatcher, calendar,
+                clock, new SwingSettings(swing.universe(), swing.indexSymbol(), swing.topN(), swing.resultsWarningDays()));
+    }
+
+    // ---------- Phase 3: pre-market brief ----------
+
+    @Bean
+    PreMarketBriefService preMarketBriefService(MarketPulseProperties props, MarketDataClient market,
+                                                NewsFeeds feeds, NewsRelevanceFilter filter,
+                                                EventCalendar calendar, Claude claude,
+                                                AlertDispatcher alertDispatcher, Clock clock) {
+        MarketPulseProperties.Brief brief = props.brief();
+        BriefWriter writer = claude.client().<BriefWriter>map(c -> new ClaudeBriefWriter(c, props.claude().briefModel()))
+                .orElse(input -> {
+                    throw new IllegalStateException("ANTHROPIC_API_KEY is not set");
+                });
+        List<CueDefinition> cues = brief.cues().stream().map(c -> new CueDefinition(c.name(), c.symbol())).toList();
+        return new PreMarketBriefService(market, cues, feeds.sources(), filter, calendar, writer, alertDispatcher, clock,
+                new BriefSettings(new HashSet<>(props.events().holidays()), brief.maxHeadlines(), brief.eventDays()));
     }
 
     private static RestClient.Builder restClientBuilder() {

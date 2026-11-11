@@ -6,7 +6,9 @@ import com.anthropic.models.messages.StructuredMessage;
 import com.anthropic.models.messages.StructuredMessageCreateParams;
 import com.fasterxml.jackson.annotation.JsonPropertyDescription;
 
+import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,6 +33,9 @@ public class ClaudeNewsImpactAnalyzer implements NewsImpactAnalyzer {
             - stocks: up to 5 NSE symbols (e.g. RELIANCE, HDFCBANK, INDIGO) that are directly affected. \
             Leave empty rather than guessing.
             - reason: one or two plain-English sentences explaining the mechanism (why it matters).
+            - resultsSymbol / resultsDate: only when the headline states the date of a listed Indian company's \
+            upcoming board meeting or announcement of financial results, give its NSE symbol and that date as \
+            YYYY-MM-DD (use the headline's publication date to pick the year). Otherwise use empty strings.
 
             Base your judgement only on the headline text given. Do not invent prices, numbers or events. \
             Global news matters when it plausibly transmits to India (Fed, crude, dollar, US tech, China, wars). \
@@ -95,9 +100,21 @@ public class ClaudeNewsImpactAnalyzer implements NewsImpactAnalyzer {
                     a.direction() != null ? a.direction() : Direction.NEUTRAL,
                     Optional.ofNullable(a.sectors()).orElse(List.of()),
                     Optional.ofNullable(a.stocks()).orElse(List.of()),
-                    Optional.ofNullable(a.reason()).orElse("")));
+                    Optional.ofNullable(a.reason()).orElse(""),
+                    resultsAnnouncement(a.resultsSymbol(), a.resultsDate())));
         }
         return impacts;
+    }
+
+    private static ResultsAnnouncement resultsAnnouncement(String symbol, String date) {
+        if (symbol == null || symbol.isBlank() || date == null || date.isBlank()) {
+            return null;
+        }
+        try {
+            return new ResultsAnnouncement(symbol.trim().toUpperCase(Locale.ROOT), LocalDate.parse(date.trim()));
+        } catch (DateTimeParseException e) {
+            return null; // the model wrote something that isn't an ISO date - ignore rather than guess
+        }
     }
 
     /** Structured-output schema returned by Claude. */
@@ -117,6 +134,10 @@ public class ClaudeNewsImpactAnalyzer implements NewsImpactAnalyzer {
             @JsonPropertyDescription("Directly affected NSE symbols, at most 5; empty if unsure")
             List<String> stocks,
             @JsonPropertyDescription("One or two sentences explaining why")
-            String reason) {
+            String reason,
+            @JsonPropertyDescription("NSE symbol whose upcoming results date the headline announces; empty string if none")
+            String resultsSymbol,
+            @JsonPropertyDescription("That results date as YYYY-MM-DD; empty string if none")
+            String resultsDate) {
     }
 }

@@ -2,12 +2,14 @@ package com.marketpulse.news;
 
 import com.marketpulse.alerts.AlertDispatcher;
 import com.marketpulse.alerts.Notifier;
+import com.marketpulse.events.EventCalendar;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,12 +27,14 @@ class NewsAlertServiceTest {
     private FakeAnalyzer analyzer;
     private RecordingNotifier notifier;
     private SeenNewsRegistry seen;
+    private EventCalendar calendar;
 
     @BeforeEach
     void setUp() {
         analyzer = new FakeAnalyzer();
         notifier = new RecordingNotifier();
         seen = new SeenNewsRegistry(1000);
+        calendar = new EventCalendar(List.of());
     }
 
     @Test
@@ -130,17 +134,30 @@ class NewsAlertServiceTest {
                 news("3", "RBI three", minutesAgo(1)));
 
         new NewsAlertService(List.of(source), filter, seen, analyzer,
-                new AlertDispatcher(List.of(notifier)), clock, smallBatches).run();
+                new AlertDispatcher(List.of(notifier)), calendar, clock, smallBatches).run();
 
         assertThat(analyzer.calls).isEqualTo(2);
         assertThat(analyzer.analyzedTitles).hasSize(3);
+    }
+
+    @Test
+    void recordsAnnouncedResultsDatesInCalendarEvenWithoutAlert() {
+        NewsSource source = () -> List.of(news("1", "Crude: Infosys board to consider Q3 results on Jan 15", minutesAgo(5)));
+        analyzer.score("Crude: Infosys board to consider Q3 results on Jan 15", 3); // below alert threshold
+        analyzer.results("Crude: Infosys board to consider Q3 results on Jan 15",
+                new ResultsAnnouncement("INFY", LocalDate.of(2027, 1, 15)));
+
+        service(source).run();
+
+        assertThat(notifier.subjects).isEmpty();
+        assertThat(calendar.nextResults("INFY", LocalDate.of(2027, 1, 1), 30)).isPresent();
     }
 
     // ---------- helpers & fakes ----------
 
     private NewsAlertService service(NewsSource... sources) {
         return new NewsAlertService(List.of(sources), filter, seen, analyzer,
-                new AlertDispatcher(List.of(notifier)), clock, settings);
+                new AlertDispatcher(List.of(notifier)), calendar, clock, settings);
     }
 
     private static Instant minutesAgo(int minutes) {
@@ -153,12 +170,17 @@ class NewsAlertServiceTest {
 
     private static class FakeAnalyzer implements NewsImpactAnalyzer {
         private final java.util.Map<String, Integer> scores = new java.util.HashMap<>();
+        private final java.util.Map<String, ResultsAnnouncement> results = new java.util.HashMap<>();
         final List<String> analyzedTitles = new ArrayList<>();
         int calls;
         boolean failNextCall;
 
         void score(String title, int impact) {
             scores.put(title, impact);
+        }
+
+        void results(String title, ResultsAnnouncement announcement) {
+            results.put(title, announcement);
         }
 
         @Override
@@ -171,7 +193,7 @@ class NewsAlertServiceTest {
             items.forEach(i -> analyzedTitles.add(i.title()));
             return items.stream()
                     .map(i -> new NewsImpact(i, scores.getOrDefault(i.title(), 1), Direction.BULLISH,
-                            List.of("Banking"), List.of("HDFCBANK"), "test reason"))
+                            List.of("Banking"), List.of("HDFCBANK"), "test reason", results.get(i.title())))
                     .toList();
         }
     }
