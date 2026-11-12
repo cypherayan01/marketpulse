@@ -2,3 +2,8 @@
 spring:
   datasource:
     url: jdbc:h2:mem:marketpulse-test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+
+# ...and never use the real Claude key from backend/.env.
+marketpulse:
+  claude:
+    api-key: ""

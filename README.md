@@ -238,7 +238,8 @@ curl -X POST -H "X-Job-Token: local-test" "localhost:8080/jobs/btst?force=true"
 curl -X POST -H "X-Job-Token: local-test" localhost:8080/jobs/replay                  # past-year scorecard
 ```
 
-Spring doesn't read `backend/.env` by itself - load it into the shell first: `set -a; source .env; set +a`.
+Local secrets go in `backend/.env` (copy `.env.example`, gitignored) - the app reads it on startup, from `backend/`
+or the repo root. Real environment variables (e.g. on Render) take priority; tests never use it.
 
 Without Telegram/email configured, alerts are printed to the log.
 

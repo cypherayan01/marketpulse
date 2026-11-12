@@ -206,9 +206,8 @@ public class AppConfig {
     /** Empty when no API key is configured - AI features then degrade gracefully. */
     @Bean
     Claude claude(MarketPulseProperties props) {
-        String apiKey = MarketPulseProperties.hasText(props.claude().apiKey())
-                ? props.claude().apiKey()
-                : System.getenv("ANTHROPIC_API_KEY");
+        // marketpulse.claude.api-key = ANTHROPIC_API_KEY from the environment or backend/.env (see application.yml)
+        String apiKey = props.claude().apiKey();
         if (!MarketPulseProperties.hasText(apiKey)) {
             log.warn("No Claude API key configured (ANTHROPIC_API_KEY) - news analysis and AI briefs are disabled");
             return new Claude(Optional.empty());

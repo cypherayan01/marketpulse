@@ -1,6 +1,10 @@
 spring:
   application:
     name: marketpulse
+  # Local secrets: read backend/.env (KEY=value lines, gitignored) if present, whether started from backend/
+  # or the repo root. Real environment variables (e.g. on Render) still take priority over this file.
+  config:
+    import: "optional:file:.env[.properties],optional:file:backend/.env[.properties]"
   # Predictions, paper trades, holdings, results dates from news and dashboard snapshots. Without DATABASE_URL a
   # local H2 database file is used (backend/data/, kept across restarts). Production: free Postgres on Neon.
   datasource:
