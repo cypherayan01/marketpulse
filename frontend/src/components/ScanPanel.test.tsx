@@ -53,6 +53,15 @@ describe('ScanPanel', () => {
     expect(screen.getByRole('heading', { name: 'AARTIIND' })).toBeInTheDocument()
   })
 
+  it('hides setups outside the chosen price range at once', () => {
+    render(<ScanPanel title="BTST" job="btst" report={segmentedReport} onRun={vi.fn()}
+                      priceRange={{ minPrice: null, maxPrice: 500, label: 'up to ₹500' }} />)
+
+    expect(screen.getByRole('heading', { name: 'AARTIIND' })).toBeInTheDocument() // ₹412.50
+    expect(screen.queryByRole('heading', { name: 'HDFCBANK' })).not.toBeInTheDocument() // ₹806.60
+    expect(screen.getByText('Showing 1 of 2 setups priced up to ₹500')).toBeInTheDocument()
+  })
+
   it('only offers filters for segments the report has', () => {
     render(<ScanPanel title="Swing" job="eod" report={segmentedReport} onRun={vi.fn()} />)
 

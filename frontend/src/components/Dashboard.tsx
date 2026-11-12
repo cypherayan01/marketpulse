@@ -6,7 +6,7 @@ import {
 import { istTime, signedPct, trendClass } from '../format'
 import type {
   Dashboard as DashboardData, HoldingsView, JobName, NewHolding, OwnedPosition, Performance, Prediction,
-  PredictionSource, ScorecardView, StockAnalysis, UniverseEntry,
+  PredictionSource, PriceRange, ScorecardView, StockAnalysis, UniverseEntry,
 } from '../types'
 import { AnalyzePanel } from './AnalyzePanel'
 import { EventsPanel } from './EventsPanel'
@@ -14,6 +14,7 @@ import { HoldingsPanel } from './HoldingsPanel'
 import { NewsPanel } from './NewsPanel'
 import { Overview } from './Overview'
 import { PredictionsPanel } from './PredictionsPanel'
+import { PriceRangeForm } from './PriceRangeForm'
 import { ScanPanel } from './ScanPanel'
 import { TrackRecordPanel } from './TrackRecordPanel'
 
@@ -47,6 +48,8 @@ interface Props {
   loadScorecard: (source: PredictionSource) => Promise<ScorecardView>
   loadPredictionDates: (source: PredictionSource) => Promise<string[]>
   loadPredictions: (date: string, source: PredictionSource) => Promise<Prediction[]>
+  btstRange: PriceRange | null
+  onSaveBtstRange: (minPrice: number | null, maxPrice: number | null) => Promise<PriceRange>
   onRun: (job: JobName) => void
   onRefresh: () => void
   onLogout: () => void
@@ -56,6 +59,12 @@ interface Props {
 export function Dashboard(props: Props) {
   const { data, onRun, onRefresh, onLogout, status } = props
   const [tab, setTab] = useState('Overview')
+  const [btstRange, setBtstRange] = useState<PriceRange | null>(props.btstRange)
+  async function saveBtstRange(minPrice: number | null, maxPrice: number | null) {
+    const saved = await props.onSaveBtstRange(minPrice, maxPrice)
+    setBtstRange(saved)
+    return saved
+  }
   const cues = TICKER.map((n) => data.brief?.cues.find((c) => c.name === n)).filter((c) => c !== undefined)
 
   return (
@@ -101,7 +110,12 @@ export function Dashboard(props: Props) {
           )}
           {tab === 'Swing' && <ScanPanel title="Swing" job="eod" report={data.swing} onRun={onRun} />}
           {tab === 'Positional' && <ScanPanel title="Positional" job="positional" report={data.positional} onRun={onRun} />}
-          {tab === 'BTST' && <ScanPanel title="BTST" job="btst" report={data.btst} onRun={onRun} />}
+          {tab === 'BTST' && (
+            <>
+              <PriceRangeForm range={btstRange} onSave={saveBtstRange} onRunScan={() => onRun('btst')} />
+              <ScanPanel title="BTST" job="btst" report={data.btst} onRun={onRun} priceRange={btstRange} />
+            </>
+          )}
           {tab === 'Predictions' && (
             <PredictionsPanel initial={props.scorecard} dates={props.predictionDates} loadScorecard={props.loadScorecard}
                               loadDates={props.loadPredictionDates} loadDay={props.loadPredictions} onRunReplay={() => onRun('replay')} />

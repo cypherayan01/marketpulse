@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { istTime, SEGMENTS } from '../format'
-import type { JobName, ScanReport, Section, Segment, TradeSignal } from '../types'
+import type { JobName, PriceRange, ScanReport, Section, Segment, TradeSignal } from '../types'
 import { SignalCard } from './SignalCard'
 
 interface Props {
@@ -8,9 +8,16 @@ interface Props {
   job: JobName
   report: ScanReport | null
   onRun: (job: JobName) => void
+  /** BTST: show only setups priced inside this range (narrowing applies at once, widening needs a new scan). */
+  priceRange?: PriceRange | null
 }
 
-export function ScanPanel({ title, job, report, onRun }: Props) {
+function inRange(range: PriceRange | null | undefined) {
+  return (s: TradeSignal) =>
+    !range || ((range.minPrice == null || s.close >= range.minPrice) && (range.maxPrice == null || s.close <= range.maxPrice))
+}
+
+export function ScanPanel({ title, job, report, onRun, priceRange }: Props) {
   const [filter, setFilter] = useState<Segment | 'ALL'>('ALL')
   const runButton = (
     <button type="button" className="secondary" onClick={() => onRun(job)}>Run {title.toLowerCase()} scan now</button>
@@ -25,13 +32,20 @@ export function ScanPanel({ title, job, report, onRun }: Props) {
     )
   }
 
-  const sections = report.sections ?? []
+  const keep = inRange(priceRange)
+  const sections = (report.sections ?? []).map((s) => ({ ...s, bullish: s.bullish.filter(keep) }))
   const shown = filter === 'ALL' ? sections : sections.filter((s) => s.segment === filter)
+  const allSetups = report.sections?.length ? report.sections.flatMap((s) => s.bullish) : report.bullish
+  const keptSetups = allSetups.filter(keep).length
+  const filtering = priceRange != null && (priceRange.minPrice != null || priceRange.maxPrice != null)
 
   return (
     <>
       <section className="panel">
         <p className="market">{report.market}</p>
+        {filtering && keptSetups < allSetups.length && (
+          <p className="footnote">Showing {keptSetups} of {allSetups.length} setups priced {priceRange.label}</p>
+        )}
         {report.notes.map((note) => (
           <p key={note} className="warning"><span aria-hidden="true">⚠️ </span><span>{note}</span></p>
         ))}
@@ -46,7 +60,7 @@ export function ScanPanel({ title, job, report, onRun }: Props) {
           </div>
         )}
         {sections.length === 0 && (
-          <SignalLists bullish={report.bullish} bearish={report.bearish} resultsSoon={report.resultsSoon} />
+          <SignalLists bullish={report.bullish.filter(keep)} bearish={report.bearish} resultsSoon={report.resultsSoon} />
         )}
       </section>
 

@@ -212,6 +212,7 @@ marketpulse:
     universe: []              # empty = same stocks as swing.universe
 
   btst:
-    top-n: 3                  # max candidates per section; only STRONG setups (score 80+) qualify for overnight risk
-    intraday-per-segment: 10  # best daily pre-scores per section that get 15-min bars (keeps 500 stocks to ~4 min)
+    top-n: 10                 # max candidates per section; only STRONG setups (score 80+) qualify for overnight risk
+    intraday-per-segment: 20  # best daily pre-scores per section that get 15-min bars (keeps 500 stocks to ~4-5 min)
+    # Price range (e.g. only stocks costing Rs 100-800) is set on the dashboard's BTST tab and saved in the database.
     universe: []      # empty = same stocks as swing.universe

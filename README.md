@@ -88,7 +88,8 @@ cron-job.org (Mon-Fri 14:50 IST)
           strength vs Nifty today, market mood
         → results due before tomorrow's session (Fri → Mon) rule a stock out entirely
         → overnight macro events (e.g. Fed decision tonight) flagged at the top
-        → top 3 candidates: tight stop (today's low / 1 ATR), 1.5x target,
+        → only stocks inside your price range (BTST tab → Price range, saved in the database)
+        → up to 10 STRONG (score 80+) candidates per market cap: tight stop (today's low / 1 ATR), 1.5x target,
           "exit if it opens below the stop or can't hold today's price in the first 15 minutes"
 ```
 

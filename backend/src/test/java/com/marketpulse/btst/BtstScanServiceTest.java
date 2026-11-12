@@ -176,6 +176,41 @@ class BtstScanServiceTest {
     }
 
     @Test
+    void skipsStocksOutsideTheChosenPriceRangeBeforeFetchingIntradayBars() {
+        nifty(WEDNESDAY, 0.005);
+        strong("RISER", WEDNESDAY);                 // ~₹170
+        strongFrom("PRICEY", WEDNESDAY, 1_000);     // ~₹1,700
+        Universe universe = Universe.unsegmented(List.of("RISER", "PRICEY"));
+
+        BtstRunSummary summary = new BtstScanService(dailyClient, intradayClient, new BtstCalculator(), new BtstScorer(),
+                dispatcher, calendar, clock, new BtstSettings(universe, "^NSEI", 10, 10), store,
+                () -> new PriceRange(null, 1000.0)).run(false);
+
+        assertThat(summary.candidates()).isEqualTo(1);
+        assertThat(intradayRequests).containsExactly("RISER");
+        var report = store.latestScan(TradeStyle.BTST).orElseThrow();
+        assertThat(report.bullish()).extracting(s -> s.symbol()).containsExactly("RISER");
+        assertThat(report.notes()).contains("Price range up to ₹1,000: 1 stock outside it skipped");
+        assertThat(bodies.getFirst()).contains("Price range up to ₹1,000").doesNotContain("PRICEY");
+    }
+
+    @Test
+    void listsUpToTenStrongCandidatesPerSection() {
+        nifty(WEDNESDAY, 0.005);
+        List<String> symbols = new ArrayList<>();
+        for (int i = 1; i <= 12; i++) {
+            strong("RISER" + i, WEDNESDAY);
+            symbols.add("RISER" + i);
+        }
+
+        BtstRunSummary summary = new BtstScanService(dailyClient, intradayClient, new BtstCalculator(), new BtstScorer(),
+                dispatcher, calendar, clock, new BtstSettings(Universe.unsegmented(symbols), "^NSEI", 10, 20), store)
+                .run(false);
+
+        assertThat(summary.candidates()).isEqualTo(10);
+    }
+
+    @Test
     void failingSymbolDoesNotStopTheScan() {
         nifty(WEDNESDAY, 0.005);
         strong("RISER", WEDNESDAY);
@@ -217,6 +252,11 @@ class BtstScanServiceTest {
     /** Up ~3% today, trading near the high on heavy volume, rising into the close. */
     private void strong(String symbol, LocalDate today) {
         daily.put(symbol, withToday(TestCandles.trend(250, 100, 0.002, 1_000, today.minusDays(1)), today, 0.03, 0.95, 1_840));
+        intraday.put(symbol, rising(today, true));
+    }
+
+    private void strongFrom(String symbol, LocalDate today, double startPrice) {
+        daily.put(symbol, withToday(TestCandles.trend(250, startPrice, 0.002, 1_000, today.minusDays(1)), today, 0.03, 0.95, 1_840));
         intraday.put(symbol, rising(today, true));
     }
 

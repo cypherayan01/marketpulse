@@ -1,4 +1,4 @@
-import type { Dashboard, Holding, HoldingsView, JobName, NewHolding, OwnedPosition, Performance, Prediction, PredictionSource, ScorecardView, StockAnalysis, UniverseEntry } from './types'
+import type { Dashboard, Holding, HoldingsView, JobName, NewHolding, OwnedPosition, Performance, Prediction, PredictionSource, PriceRange, ScorecardView, StockAnalysis, UniverseEntry } from './types'
 
 /** The dashboard token was missing or wrong. */
 export class UnauthorizedError extends Error {
@@ -37,6 +37,8 @@ export interface Api {
   getPredictionDates(token: string, source: PredictionSource): Promise<string[]>
   getPredictions(token: string, date: string, source: PredictionSource): Promise<Prediction[]>
   runJob(token: string, job: JobName): Promise<void>
+  getBtstPriceRange(token: string): Promise<PriceRange>
+  saveBtstPriceRange(token: string, minPrice: number | null, maxPrice: number | null): Promise<PriceRange>
 }
 
 export function createApi(baseUrl: string): Api {
@@ -105,6 +107,13 @@ export function createApi(baseUrl: string): Api {
     },
     async runJob(token, job) {
       await call(`/api/run/${job}`, token, { method: 'POST' })
+    },
+    async getBtstPriceRange(token) {
+      return (await (await call('/api/settings/btst', token)).json()) as PriceRange
+    },
+    async saveBtstPriceRange(token, minPrice, maxPrice) {
+      const response = await call('/api/settings/btst', token, { method: 'PUT' }, { minPrice, maxPrice })
+      return (await response.json()) as PriceRange
     },
   }
 }

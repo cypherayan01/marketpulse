@@ -285,3 +285,12 @@ input:hover, select:hover { border-color: #54544f; }
   .trades td:first-child { grid-column: 1 / -1; }
   .trades td:not(:first-child)::before { content: attr(data-label); display: block; color: var(--muted); font-size: .68rem; }
 }
+
+/* ---------- BTST price range ---------- */
+.price-range-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.price-range-head h2 { margin: 0; }
+.price-range-fields { display: grid; gap: .7rem; align-items: end;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-top: .75rem; }
+.price-range-fields label { display: flex; flex-direction: column; gap: .3rem; color: var(--muted); font-size: .8rem; font-weight: 500; }
+.price-range-fields button { justify-content: center; padding: .65rem; }
+.price-range .status button { margin-left: .4rem; }

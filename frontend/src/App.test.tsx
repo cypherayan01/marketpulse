@@ -19,6 +19,8 @@ function fakeApi(overrides: Partial<Api> = {}): Api {
     getPredictionDates: vi.fn().mockResolvedValue(['2026-11-11']),
     getPredictions: vi.fn().mockResolvedValue([]),
     runJob: vi.fn().mockResolvedValue(undefined),
+    getBtstPriceRange: vi.fn().mockResolvedValue({ minPrice: 100, maxPrice: 800, label: '₹100 - ₹800' }),
+    saveBtstPriceRange: vi.fn().mockResolvedValue({ minPrice: 100, maxPrice: 500, label: '₹100 - ₹500' }),
     ...overrides,
   }
 }
@@ -82,6 +84,21 @@ describe('App', () => {
 
     await waitFor(() => expect(api.runJob).toHaveBeenCalledWith('secret', 'positional'))
     expect(screen.getByRole('status')).toHaveTextContent(/started/i)
+  })
+
+  it('loads and saves the BTST price range on the BTST tab', async () => {
+    localStorage.setItem('marketpulse.token', 'secret')
+    const api = fakeApi()
+    render(<App api={api} />)
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'BTST' }))
+    expect(screen.getByLabelText('Maximum price (₹)')).toHaveValue(800)
+    await userEvent.clear(screen.getByLabelText('Maximum price (₹)'))
+    await userEvent.type(screen.getByLabelText('Maximum price (₹)'), '500')
+    await userEvent.click(screen.getByRole('button', { name: 'Save range' }))
+
+    await waitFor(() => expect(api.saveBtstPriceRange).toHaveBeenCalledWith('secret', 100, 500))
+    expect(api.getBtstPriceRange).toHaveBeenCalledWith('secret')
   })
 
   it('shows the paper-trading track record', async () => {

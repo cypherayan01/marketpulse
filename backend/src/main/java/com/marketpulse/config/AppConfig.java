@@ -16,6 +16,8 @@ import com.marketpulse.brief.ClaudeBriefWriter;
 import com.marketpulse.brief.CueDefinition;
 import com.marketpulse.brief.PreMarketBriefService;
 import com.marketpulse.btst.BtstCalculator;
+import com.marketpulse.btst.BtstPreferences;
+import com.marketpulse.btst.JdbcBtstPreferences;
 import com.marketpulse.btst.BtstScanService;
 import com.marketpulse.btst.BtstScorer;
 import com.marketpulse.btst.BtstSettings;
@@ -297,15 +299,20 @@ public class AppConfig {
     // ---------- Phase 5: BTST 3 PM scan ----------
 
     @Bean
+    BtstPreferences btstPreferences(JdbcClient jdbc) {
+        return new JdbcBtstPreferences(jdbc);
+    }
+
+    @Bean
     BtstScanService btstScanService(MarketPulseProperties props, YahooChartClient yahoo, Universe universe,
                                     AlertDispatcher alertDispatcher, EventCalendar calendar, Clock clock,
-                                    ReportStore store) {
+                                    ReportStore store, BtstPreferences btstPreferences) {
         MarketPulseProperties.Btst btst = props.btst();
         Universe scanned = btst.universe().isEmpty() ? universe : Universe.unsegmented(btst.universe());
         // Today's candle is still forming at 3 PM, so BTST reads Yahoo directly rather than the 20-minute cache.
         return new BtstScanService(yahoo, yahoo, new BtstCalculator(), new BtstScorer(), alertDispatcher, calendar,
                 clock, new BtstSettings(scanned, props.swing().indexSymbol(), btst.topN(), btst.intradayPerSegment()),
-                store);
+                store, btstPreferences::priceRange); // the dashboard's price range, re-read on every scan
     }
 
     // ---------- Holdings health check ----------

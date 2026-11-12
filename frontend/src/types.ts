@@ -279,3 +279,10 @@ export interface ScorecardView {
   styles: StyleScorecard[]
   caveat: string | null
 }
+
+/** BTST share-price window chosen on the dashboard; null = open end. */
+export interface PriceRange {
+  minPrice: number | null
+  maxPrice: number | null
+  label: string // e.g. "₹100 - ₹800", "up to ₹1,500", "any price"
+}

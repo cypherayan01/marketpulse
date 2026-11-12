@@ -32,6 +32,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /** ~3 PM IST: find stocks closing strong enough to hold overnight. */
 public class BtstScanService {
@@ -51,12 +52,21 @@ public class BtstScanService {
     private final Clock clock;
     private final BtstSettings settings;
     private final ReportStore store;
+    private final Supplier<PriceRange> priceRange;
 
     private final Object runLock = new Object();
 
     public BtstScanService(MarketDataClient dailyData, IntradayDataClient intradayData, BtstCalculator calculator,
                            BtstScorer scorer, AlertDispatcher dispatcher, EventCalendar calendar, Clock clock,
                            BtstSettings settings, ReportStore store) {
+        this(dailyData, intradayData, calculator, scorer, dispatcher, calendar, clock, settings, store, () -> PriceRange.ANY);
+    }
+
+    /** @param priceRange the dashboard's share-price window, read at the start of every scan */
+    public BtstScanService(MarketDataClient dailyData, IntradayDataClient intradayData, BtstCalculator calculator,
+                           BtstScorer scorer, AlertDispatcher dispatcher, EventCalendar calendar, Clock clock,
+                           BtstSettings settings, ReportStore store,
+                           Supplier<PriceRange> priceRange) {
         this.dailyData = dailyData;
         this.intradayData = intradayData;
         this.calculator = calculator;
@@ -66,6 +76,7 @@ public class BtstScanService {
         this.clock = clock;
         this.settings = settings;
         this.store = store;
+        this.priceRange = priceRange;
     }
 
     /** @param force run even without a session today (testing) */
@@ -97,12 +108,18 @@ public class BtstScanService {
                 .toList();
 
         // Pass 1: every stock on today's daily candle alone (no intraday request yet).
+        PriceRange range = priceRange.get();
+        int outsideRange = 0;
         List<Candidate> prescored = new ArrayList<>();
         List<String> failed = new ArrayList<>();
         List<String> resultsDue = new ArrayList<>();
         for (String symbol : settings.universe().symbols()) {
             try {
                 List<Candle> daily = dailyData.dailyCandles(symbol);
+                if (!range.contains(daily.getLast().close())) {
+                    outsideRange++; // not affordable / not wanted: don't spend an intraday request on it
+                    continue;
+                }
                 LocalDate results = calendar.nextResults(symbol, today, daysToNextSession)
                         .map(MarketEvent::date).orElse(null);
                 if (results != null) {
@@ -155,6 +172,11 @@ public class BtstScanService {
         if (!incomplete.isEmpty()) {
             notes.add(incomplete.substring(3)); // the dashboard adds its own warning icon
         }
+        String rangeNote = range.isAny() ? "" : "Price range %s: %d stock%s outside it skipped"
+                .formatted(range.label(), outsideRange, outsideRange == 1 ? "" : "s");
+        if (!rangeNote.isEmpty()) {
+            notes.add(rangeNote);
+        }
         overnight.forEach(e -> notes.add("Overnight event risk: " + e.title()));
         if (!resultsDue.isEmpty()) {
             notes.add("Excluded - Results due: " + String.join(", ", resultsDue));
@@ -164,7 +186,8 @@ public class BtstScanService {
                 overnight, prescored.size(), failed, notes, sections));
 
         boolean sent = dispatcher.send(BtstReportFormatter.subject(today, candidateCount) + (incomplete.isEmpty() ? "" : " (incomplete)"),
-                BtstReportFormatter.body(niftyChange, sections, overnight, resultsDue, prescored.size(), failed));
+                BtstReportFormatter.body(niftyChange, sections, overnight, resultsDue, prescored.size(), failed)
+                        + (rangeNote.isEmpty() ? "" : "\n" + rangeNote + "\n"));
         BtstRunSummary summary = new BtstRunSummary(prescored.size(), failed.size(), candidateCount, sent, null);
         log.info("BTST scan finished: {} ({} intraday requests)", summary, signals.size());
         return summary;
