@@ -19,6 +19,7 @@ import org.ta4j.core.num.Num;
 
 import java.time.Duration;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 
 /** Computes the daily-chart indicators a swing trader looks at, using ta4j. */
@@ -31,40 +32,84 @@ public class IndicatorCalculator {
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
 
     public IndicatorSnapshot calculate(String symbol, List<Candle> candles) {
-        if (candles.size() < MIN_BARS) {
-            throw new IllegalArgumentException(
-                    "%s has only %d sessions of history; need at least %d".formatted(symbol, candles.size(), MIN_BARS));
+        requireHistory(symbol, candles.size());
+        return snapshotAt(symbol, candles, new Indicators(toSeries(symbol, candles)), candles.size() - 1);
+    }
+
+    /**
+     * Snapshots for every day from {@code firstIndex} to the end, building the indicators once. Each snapshot
+     * equals {@link #calculate} on the candles up to that day only (indicators are causal), so a history replay
+     * never sees the future.
+     */
+    public List<IndicatorSnapshot> snapshotsFrom(String symbol, List<Candle> candles, int firstIndex) {
+        requireHistory(symbol, candles.size());
+        Indicators indicators = new Indicators(toSeries(symbol, candles));
+        List<IndicatorSnapshot> snapshots = new ArrayList<>();
+        for (int i = Math.max(firstIndex, MIN_BARS - 1); i < candles.size(); i++) {
+            snapshots.add(snapshotAt(symbol, candles, indicators, i));
         }
-        BarSeries series = toSeries(symbol, candles);
-        int last = series.getEndIndex();
+        return snapshots;
+    }
 
-        ClosePriceIndicator close = new ClosePriceIndicator(series);
-        HighPriceIndicator high = new HighPriceIndicator(series);
-        LowPriceIndicator low = new LowPriceIndicator(series);
-        VolumeIndicator volume = new VolumeIndicator(series);
-        MACDIndicator macd = new MACDIndicator(close, 12, 26);
-        EMAIndicator macdSignal = macd.getSignalLine(9);
+    private static void requireHistory(String symbol, int bars) {
+        if (bars < MIN_BARS) {
+            throw new IllegalArgumentException(
+                    "%s has only %d sessions of history; need at least %d".formatted(symbol, bars, MIN_BARS));
+        }
+    }
 
+    /** All indicators over one series; ta4j caches values, so reading many indices is cheap. */
+    private static final class Indicators {
+        final ClosePriceIndicator close;
+        final EMAIndicator ema20, ema50, ema200;
+        final RSIIndicator rsi;
+        final MACDIndicator macd;
+        final EMAIndicator macdSignal;
+        final ATRIndicator atr;
+        final SMAIndicator avgVolume;
+        final HighestValueIndicator high20, high52w;
+        final LowestValueIndicator low20, low10;
+
+        Indicators(BarSeries series) {
+            close = new ClosePriceIndicator(series);
+            HighPriceIndicator high = new HighPriceIndicator(series);
+            LowPriceIndicator low = new LowPriceIndicator(series);
+            ema20 = new EMAIndicator(close, 20);
+            ema50 = new EMAIndicator(close, 50);
+            ema200 = new EMAIndicator(close, 200);
+            rsi = new RSIIndicator(close, 14);
+            macd = new MACDIndicator(close, 12, 26);
+            macdSignal = macd.getSignalLine(9);
+            atr = new ATRIndicator(series, 14);
+            avgVolume = new SMAIndicator(new VolumeIndicator(series), 20);
+            high20 = new HighestValueIndicator(high, 20);
+            low20 = new LowestValueIndicator(low, 20);
+            high52w = new HighestValueIndicator(high, SESSIONS_52W);
+            low10 = new LowestValueIndicator(low, 10);
+        }
+    }
+
+    private static IndicatorSnapshot snapshotAt(String symbol, List<Candle> candles, Indicators x, int i) {
         return new IndicatorSnapshot(
                 symbol,
-                candles.getLast().date(),
-                v(close, last),
-                v(new EMAIndicator(close, 20), last),
-                v(new EMAIndicator(close, 50), last),
-                v(new EMAIndicator(close, 200), last),
-                v(new RSIIndicator(close, 14), last),
-                v(macd, last),
-                v(macdSignal, last),
-                macdCross(macd, macdSignal, last),
-                v(new ATRIndicator(series, 14), last),
-                candles.getLast().volume(),
-                v(new SMAIndicator(volume, 20), last - 1),
-                v(new HighestValueIndicator(high, 20), last - 1),
-                v(new LowestValueIndicator(low, 20), last - 1),
-                v(new HighestValueIndicator(high, SESSIONS_52W), last),
-                v(new LowestValueIndicator(low, 10), last),
-                v(close, last) / v(close, last - SESSIONS_3M) - 1,
-                candles.size());
+                candles.get(i).date(),
+                v(x.close, i),
+                v(x.ema20, i),
+                v(x.ema50, i),
+                v(x.ema200, i),
+                v(x.rsi, i),
+                v(x.macd, i),
+                v(x.macdSignal, i),
+                macdCross(x.macd, x.macdSignal, i),
+                v(x.atr, i),
+                candles.get(i).volume(),
+                v(x.avgVolume, i - 1),
+                v(x.high20, i - 1),
+                v(x.low20, i - 1),
+                v(x.high52w, i),
+                v(x.low10, i),
+                v(x.close, i) / v(x.close, i - SESSIONS_3M) - 1,
+                i + 1);
     }
 
     private static MacdCross macdCross(Indicator<Num> macd, Indicator<Num> signal, int last) {

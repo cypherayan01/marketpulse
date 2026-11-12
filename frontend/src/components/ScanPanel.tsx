@@ -1,5 +1,6 @@
-import { istTime } from '../format'
-import type { JobName, ScanReport } from '../types'
+import { useState } from 'react'
+import { istTime, SEGMENTS } from '../format'
+import type { JobName, ScanReport, Section, Segment, TradeSignal } from '../types'
 import { SignalCard } from './SignalCard'
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export function ScanPanel({ title, job, report, onRun }: Props) {
+  const [filter, setFilter] = useState<Segment | 'ALL'>('ALL')
   const runButton = (
     <button type="button" className="secondary" onClick={() => onRun(job)}>Run {title.toLowerCase()} scan now</button>
   )
@@ -23,33 +25,73 @@ export function ScanPanel({ title, job, report, onRun }: Props) {
     )
   }
 
+  const sections = report.sections ?? []
+  const shown = filter === 'ALL' ? sections : sections.filter((s) => s.segment === filter)
+
   return (
-    <section className="panel">
-      <p className="market">{report.market}</p>
-      {report.notes.map((note) => (
-        <p key={note} className="warning"><span aria-hidden="true">⚠️ </span><span>{note}</span></p>
-      ))}
+    <>
+      <section className="panel">
+        <p className="market">{report.market}</p>
+        {report.notes.map((note) => (
+          <p key={note} className="warning"><span aria-hidden="true">⚠️ </span><span>{note}</span></p>
+        ))}
+        {sections.length > 0 && (
+          <div className="chips" aria-label="Market cap">
+            <button type="button" aria-pressed={filter === 'ALL'} onClick={() => setFilter('ALL')}>All caps</button>
+            {sections.map((s) => (
+              <button key={s.segment} type="button" aria-pressed={filter === s.segment} onClick={() => setFilter(s.segment)}>
+                {SEGMENTS[s.segment].title}
+              </button>
+            ))}
+          </div>
+        )}
+        {sections.length === 0 && (
+          <SignalLists bullish={report.bullish} bearish={report.bearish} resultsSoon={report.resultsSoon} />
+        )}
+      </section>
 
-      <h2>Setups</h2>
-      {report.bullish.length === 0 && <p className="empty">No setups this time - sitting out is a valid position.</p>}
+      {shown.map((s) => <SegmentSection key={s.segment} section={s} resultsSoon={report.resultsSoon} />)}
+
+      <section className="panel">
+        <p className="footnote">
+          {report.scanned} stocks scanned · {istTime(report.generatedAt)}
+          {report.failed.length > 0 && ` · ${report.failed.length} skipped (new listings or no data)`}
+        </p>
+        {runButton}
+      </section>
+    </>
+  )
+}
+
+function SegmentSection({ section, resultsSoon }: { section: Section; resultsSoon: Record<string, string> }) {
+  const segment = SEGMENTS[section.segment]
+  return (
+    <section className="panel" aria-label={segment.title}>
+      <h2><span aria-hidden="true">{segment.icon} </span>{segment.title}</h2>
+      <p className="footnote">{section.indexLine ?? segment.index} · {section.scanned} scanned</p>
+      <SignalLists bullish={section.bullish} bearish={section.bearish} resultsSoon={resultsSoon} />
+    </section>
+  )
+}
+
+function SignalLists({ bullish, bearish, resultsSoon }: {
+  bullish: TradeSignal[]; bearish: TradeSignal[]; resultsSoon: Record<string, string>
+}) {
+  return (
+    <>
+      <h3 className="list-title">Setups</h3>
+      {bullish.length === 0 && <p className="empty">No setups this time - sitting out is a valid position.</p>}
       <div className="cards">
-        {report.bullish.map((s) => <SignalCard key={s.symbol} signal={s} resultsDate={report.resultsSoon[s.symbol]} />)}
+        {bullish.map((s) => <SignalCard key={s.symbol} signal={s} resultsDate={resultsSoon[s.symbol]} />)}
       </div>
-
-      {report.bearish.length > 0 && (
+      {bearish.length > 0 && (
         <>
-          <h2>Avoid / review if holding</h2>
+          <h3 className="list-title">Avoid / review if holding</h3>
           <div className="cards">
-            {report.bearish.map((s) => <SignalCard key={s.symbol} signal={s} />)}
+            {bearish.map((s) => <SignalCard key={s.symbol} signal={s} />)}
           </div>
         </>
       )}
-
-      <p className="footnote">
-        {report.scanned} stocks scanned · {istTime(report.generatedAt)}
-        {report.failed.length > 0 && ` · data unavailable: ${report.failed.join(', ')}`}
-      </p>
-      {runButton}
-    </section>
+    </>
   )
 }

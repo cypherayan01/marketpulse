@@ -1,0 +1,1 @@
+{"chart": {"result": [{"meta": {"symbol": "NIFTY_MIDCAP_100.NS", "regularMarketTime": 1794391140, "regularMarketPrice": 61519.1, "chartPreviousClose": 61022.55}, "timestamp": [1794391140], "indicators": {"quote": [{"open": [61100.0], "high": [61600.0], "low": [61000.0], "close": [61519.1], "volume": [0]}]}}], "error": null}}

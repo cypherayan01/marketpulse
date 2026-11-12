@@ -1,5 +1,5 @@
 import { rupees, shortDate, signedPct, styleName, trendClass } from '../format'
-import type { Performance, StyleStats, TradeStatus } from '../types'
+import type { Bucket, Performance, StyleStats, TradeStatus } from '../types'
 
 const MEANINGFUL_SAMPLE = 30
 const STATUS: Record<TradeStatus, string> = {
@@ -84,17 +84,24 @@ function StyleCard({ stats }: { stats: StyleStats }) {
           {stats.closed < MEANINGFUL_SAMPLE && (
             <p className="warning">Too few closed trades to judge yet ({stats.closed} of ~{MEANINGFUL_SAMPLE}).</p>
           )}
+          <BucketTable caption="By score" first="Score" buckets={stats.byScore} />
+          {stats.bySegment.length > 0 && <BucketTable caption="By market cap" first="Segment" buckets={stats.bySegment} />}
+        </>
+      )}
+    </section>
+  )
+}
+
+function BucketTable({ caption, first, buckets }: { caption: string; first: string; buckets: Bucket[] }) {
+  return (
           <table className="buckets">
-            <caption>By score</caption>
-            <thead><tr><th>Score</th><th>Trades</th><th>Win</th><th>Avg</th></tr></thead>
+            <caption>{caption}</caption>
+            <thead><tr><th>{first}</th><th>Trades</th><th>Win</th><th>Avg</th></tr></thead>
             <tbody>
-              {stats.byScore.map((b) => (
+              {buckets.map((b) => (
                 <tr key={b.label}><th scope="row">{b.label}</th><td>{b.closed}</td><td>{Math.round(b.winRatePct)}%</td><td>{signedPct(b.avgReturnPct)}</td></tr>
               ))}
             </tbody>
           </table>
-        </>
-      )}
-    </section>
   )
 }

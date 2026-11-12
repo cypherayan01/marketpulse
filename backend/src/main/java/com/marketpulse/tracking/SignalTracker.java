@@ -18,13 +18,21 @@ public class SignalTracker {
     private final MarketDataClient market;
     private final PaperTradeEvaluator evaluator;
 
+    private final Object runLock = new Object();
+
     public SignalTracker(SignalRepository repository, MarketDataClient market, PaperTradeEvaluator evaluator) {
         this.repository = repository;
         this.market = market;
         this.evaluator = evaluator;
     }
 
-    public synchronized TrackingRunSummary update() {
+    public TrackingRunSummary update() {
+        synchronized (runLock) { // private lock: outside code can never hold it
+            return updateLocked();
+        }
+    }
+
+    private TrackingRunSummary updateLocked() {
         List<TrackedSignal> open = repository.findOpen();
         Map<String, List<Candle>> candles = new HashMap<>();
         int closed = 0;

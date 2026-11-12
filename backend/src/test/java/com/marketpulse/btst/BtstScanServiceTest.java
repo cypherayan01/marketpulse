@@ -12,6 +12,9 @@ import com.marketpulse.market.MarketDataClient;
 import com.marketpulse.market.TestCandles;
 import com.marketpulse.reports.ReportStore;
 import com.marketpulse.signals.TradeStyle;
+import com.marketpulse.universe.IndexMember;
+import com.marketpulse.universe.Segment;
+import com.marketpulse.universe.Universe;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -37,7 +40,11 @@ class BtstScanServiceTest {
         if (c == null) throw new IllegalStateException("no data for " + symbol);
         return c;
     };
-    private final IntradayDataClient intradayClient = symbol -> intraday.getOrDefault(symbol, List.of());
+    private final List<String> intradayRequests = new ArrayList<>();
+    private final IntradayDataClient intradayClient = symbol -> {
+        intradayRequests.add(symbol);
+        return intraday.getOrDefault(symbol, List.of());
+    };
     private final List<String> subjects = new ArrayList<>();
     private final List<String> bodies = new ArrayList<>();
     private final AlertDispatcher dispatcher = new AlertDispatcher(List.of((s, b) -> { subjects.add(s); bodies.add(b); }));
@@ -121,6 +128,54 @@ class BtstScanServiceTest {
     }
 
     @Test
+    void onlyStrongSetupsBecomeOvernightCandidates() {
+        nifty(WEDNESDAY, 0.005);
+        strong("RISER", WEDNESDAY);
+        // up 1.6% near the high, no volume surge and no push in the last hour: bullish (~77), not strong
+        daily.put("MILD", withToday(TestCandles.trend(250, 100, 0.001, 1_000, WEDNESDAY.minusDays(1)), WEDNESDAY,
+                0.016, 0.85, 900));
+        intraday.put("MILD", List.of());
+
+        BtstRunSummary summary = service(List.of("RISER", "MILD")).run(false);
+
+        assertThat(summary.candidates()).isEqualTo(1);
+        assertThat(bodies.getFirst()).contains("RISER").doesNotContain("MILD");
+    }
+
+    @Test
+    void fetchesIntradayBarsOnlyForThePromisingStocksInEachSegment() {
+        nifty(WEDNESDAY, 0.005);
+        strong("RISER", WEDNESDAY);
+        strong("RISER2", WEDNESDAY);
+        weak("FADER", WEDNESDAY);
+        Universe universe = Universe.of(List.of(m("RISER"), m("RISER2"), m("FADER")), List.of(), List.of(),
+                List.of(m("RISER"), m("RISER2"), m("FADER")));
+
+        new BtstScanService(dailyClient, intradayClient, new BtstCalculator(), new BtstScorer(), dispatcher, calendar,
+                clock, new BtstSettings(universe, "^NSEI", 6, 1), store).run(false);
+
+        assertThat(intradayRequests).hasSize(1).doesNotContain("FADER");
+    }
+
+    @Test
+    void groupsCandidatesBySegment() {
+        nifty(WEDNESDAY, 0.005);
+        strong("RISER", WEDNESDAY);
+        strong("SMALLRISER", WEDNESDAY);
+        Universe universe = Universe.of(List.of(m("RISER")), List.of(), List.of(m("SMALLRISER")),
+                List.of(m("RISER"), m("SMALLRISER")));
+
+        new BtstScanService(dailyClient, intradayClient, new BtstCalculator(), new BtstScorer(), dispatcher, calendar,
+                clock, new BtstSettings(universe, "^NSEI", 6, 10), store).run(false);
+
+        String body = bodies.getFirst();
+        assertThat(body.indexOf("LARGE CAP")).isLessThan(body.indexOf("RISER"));
+        assertThat(body.indexOf("SMALL CAP")).isLessThan(body.indexOf("SMALLRISER"));
+        assertThat(store.latestScan(TradeStyle.BTST).orElseThrow().sections())
+                .extracting(s -> s.segment()).containsExactly(Segment.LARGE, Segment.SMALL);
+    }
+
+    @Test
     void failingSymbolDoesNotStopTheScan() {
         nifty(WEDNESDAY, 0.005);
         strong("RISER", WEDNESDAY);
@@ -140,6 +195,10 @@ class BtstScanServiceTest {
     }
 
     // ---------- helpers ----------
+
+    private static IndexMember m(String symbol) {
+        return new IndexMember(symbol, symbol, "");
+    }
 
     private BtstScanService service(List<String> universe) {
         return new BtstScanService(dailyClient, intradayClient, new BtstCalculator(), new BtstScorer(), dispatcher,

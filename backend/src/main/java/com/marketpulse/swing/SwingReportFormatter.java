@@ -1,10 +1,10 @@
 package com.marketpulse.swing;
 
-import com.marketpulse.signals.TradePlan;
-
-import com.marketpulse.signals.TradeSignal;
-
 import com.marketpulse.events.MarketEvent;
+import com.marketpulse.reports.IndexLines;
+import com.marketpulse.reports.Section;
+import com.marketpulse.signals.TradePlan;
+import com.marketpulse.signals.TradeSignal;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -15,7 +15,7 @@ import java.util.Map;
 
 import static com.marketpulse.signals.Money.rupees;
 
-/** Plain-text swing watchlist that reads well in both Telegram and email. */
+/** Plain-text swing watchlist, one section per market-cap segment, readable in Telegram and email. */
 final class SwingReportFormatter {
 
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH);
@@ -29,43 +29,35 @@ final class SwingReportFormatter {
         return "📊 Swing watchlist · %s · %d bullish, %d to avoid".formatted(DAY.format(session), bullish, bearish);
     }
 
-    static String body(EodWatchlistService.MarketContext market, List<TradeSignal> bullish, List<TradeSignal> bearish,
+    static String body(EodWatchlistService.MarketContext market, List<Section> sections,
                        Map<String, MarketEvent> resultsSoon, List<MarketEvent> events, LocalDate today,
                        int scanned, List<String> failed) {
         StringBuilder sb = new StringBuilder();
-        sb.append("Market: ").append(marketLine(market)).append("\n\n");
+        sb.append("Market: ").append(marketLine(market)).append('\n');
+        String incomplete = IndexLines.incompleteWarning(failed.size(), scanned + failed.size());
+        if (!incomplete.isEmpty()) {
+            sb.append(incomplete).append('\n');
+        }
+        sb.append("Swing setups hold ~3-20 days.\n");
 
-        sb.append("🟢 BULLISH SETUPS (swing, hold ~3-20 days)\n");
-        if (bullish.isEmpty()) {
-            sb.append("No strong setups today - sitting out is a valid position.\n");
-        }
-        int n = 1;
-        for (TradeSignal s : bullish) {
-            TradePlan p = s.plan();
-            sb.append("\n%d. %s - %d/100 %s · confidence %s%n".formatted(n++, s.symbol(), s.score(),
-                    s.classification().label(), s.confidence()));
-            sb.append(String.format(Locale.ENGLISH, "   Close %s | Stop %s (-%.1f%%) | Target %s%n", rupees(p.entry()), rupees(p.stopLoss()), p.riskPct(), rupees(p.target())));
-            sb.append("   Why: ").append(String.join("; ", s.bullishFactors())).append('\n');
-            if (!s.bearishFactors().isEmpty()) {
-                sb.append("   ⚠️ Watch: ").append(String.join("; ", s.bearishFactors())).append('\n');
+        for (Section section : sections) {
+            sb.append('\n').append(header(section)).append('\n');
+            if (section.bullish().isEmpty()) {
+                sb.append("🟢 No strong setups.\n");
+            } else {
+                sb.append("🟢 Setups\n");
             }
-            MarketEvent results = resultsSoon.get(s.symbol());
-            if (results != null) {
-                sb.append("   ⚠️ Results on %s (in %d days) - a results surprise can break any setup%n".formatted(
-                        SHORT_DAY.format(results.date()), ChronoUnit.DAYS.between(today, results.date())));
+            int n = 1;
+            for (TradeSignal s : section.bullish()) {
+                appendSetup(sb, n++, s, resultsSoon.get(s.symbol()), today);
             }
-            sb.append("   Invalidated if: ").append(s.invalidation()).append('\n');
-        }
-
-        sb.append("\n🔴 AVOID / REVIEW IF HOLDING\n");
-        if (bearish.isEmpty()) {
-            sb.append("Nothing flagged.\n");
-        }
-        n = 1;
-        for (TradeSignal s : bearish) {
-            sb.append("\n%d. %s - %d/100 %s · close %s%n".formatted(n++, s.symbol(), s.score(),
-                    s.classification().label(), rupees(s.close())));
-            sb.append("   Why: ").append(String.join("; ", s.bearishFactors().stream().limit(4).toList())).append('\n');
+            if (!section.bearish().isEmpty()) {
+                sb.append("🔴 Avoid / review if holding\n");
+                for (TradeSignal s : section.bearish()) {
+                    sb.append("   %s %d · %s · %s%n".formatted(s.symbol(), s.score(), rupees(s.close()),
+                            String.join("; ", s.bearishFactors().stream().limit(2).toList())));
+                }
+            }
         }
 
         if (!events.isEmpty()) {
@@ -76,12 +68,36 @@ final class SwingReportFormatter {
         }
 
         sb.append("\nScanned %d stocks".formatted(scanned));
-        if (!failed.isEmpty()) {
-            sb.append(" · Data unavailable: ").append(String.join(", ", failed));
+        String skipped = IndexLines.skipped(failed);
+        if (!skipped.isEmpty()) {
+            sb.append(" · ").append(skipped);
         }
         sb.append("\n\nRule-based signals, not predictions. Check upcoming results dates and news before buying. "
                 + "Not investment advice.");
         return sb.toString();
+    }
+
+    static String header(Section s) {
+        String index = s.indexLine() != null ? s.indexLine() : s.segment().indexName();
+        return "%s %s · %s · %d scanned".formatted(s.segment().icon(), s.segment().title().toUpperCase(Locale.ENGLISH),
+                index, s.scanned());
+    }
+
+    private static void appendSetup(StringBuilder sb, int n, TradeSignal s, MarketEvent results, LocalDate today) {
+        TradePlan p = s.plan();
+        sb.append("%d. %s %d · %s · confidence %s%n".formatted(n, s.symbol(), s.score(), s.classification().label(),
+                s.confidence()));
+        sb.append(String.format(Locale.ENGLISH, "   Close %s · Stop %s (-%.1f%%) · Target %s%n",
+                rupees(p.entry()), rupees(p.stopLoss()), p.riskPct(), rupees(p.target())));
+        sb.append("   Why: ").append(String.join("; ", s.bullishFactors().stream().limit(3).toList())).append('\n');
+        if (!s.bearishFactors().isEmpty()) {
+            sb.append("   ⚠️ ").append(String.join("; ", s.bearishFactors())).append('\n');
+        }
+        if (results != null) {
+            sb.append("   ⚠️ Results on %s (in %d days) - a results surprise can break any setup%n".formatted(
+                    SHORT_DAY.format(results.date()), ChronoUnit.DAYS.between(today, results.date())));
+        }
+        sb.append("   ✋ ").append(s.invalidation()).append('\n');
     }
 
     static String marketLine(EodWatchlistService.MarketContext market) {

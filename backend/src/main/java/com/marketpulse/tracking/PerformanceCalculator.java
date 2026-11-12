@@ -2,6 +2,7 @@ package com.marketpulse.tracking;
 
 import com.marketpulse.signals.Confidence;
 import com.marketpulse.signals.TradeStyle;
+import com.marketpulse.universe.Segment;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,12 +31,17 @@ public class PerformanceCalculator {
             addBucket(byConfidence, c.name(), closed, t -> t.confidence() == c);
         }
 
+        List<Bucket> bySegment = new ArrayList<>();
+        for (Segment s : Segment.values()) {
+            addBucket(bySegment, s.title(), closed, t -> t.segment() == s);
+        }
+
         return new StyleStats(style, trades.size() - closed.size(), closed.size(), wins.size(),
                 share(wins.size(), closed.size()), average(returns), average(wins), average(losses),
                 count(closed, TradeStatus.TARGET_HIT), count(closed, TradeStatus.STOPPED), count(closed, TradeStatus.EXPIRED),
                 returns.stream().mapToDouble(Double::doubleValue).max().orElse(0),
                 returns.stream().mapToDouble(Double::doubleValue).min().orElse(0),
-                byScore, byConfidence);
+                byScore, byConfidence, bySegment);
     }
 
     private static void addBucket(List<Bucket> buckets, String label, List<TrackedSignal> closed,

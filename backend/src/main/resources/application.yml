@@ -1,10 +1,10 @@
 spring:
   application:
     name: marketpulse
-  # Paper trades, results dates from news and dashboard snapshots. Without DATABASE_URL an in-memory H2 database
-  # is used (fine locally, lost on restart). Production: free Postgres on Neon - see README.
+  # Predictions, paper trades, holdings, results dates from news and dashboard snapshots. Without DATABASE_URL a
+  # local H2 database file is used (backend/data/, kept across restarts). Production: free Postgres on Neon.
   datasource:
-    url: ${DATABASE_URL:jdbc:h2:mem:marketpulse;MODE=PostgreSQL;DB_CLOSE_DELAY=-1}
+    url: ${DATABASE_URL:jdbc:h2:file:./data/marketpulse;MODE=PostgreSQL;AUTO_SERVER=TRUE}
     username: ${DATABASE_USERNAME:sa}
     password: ${DATABASE_PASSWORD:}
     hikari:
@@ -156,13 +156,11 @@ marketpulse:
 
   swing:
     index-symbol: ^NSEI   # Nifty 50 - market context and relative strength benchmark
-    top-n: 5              # max stocks per list in the daily report
-    # Stocks scanned after the close (Nifty 50 as of Nov 2026). Plain NSE symbols.
-    universe: [RELIANCE, HDFCBANK, ICICIBANK, INFY, TCS, BHARTIARTL, ITC, SBIN, LT, HINDUNILVR,
-               KOTAKBANK, AXISBANK, BAJFINANCE, "M&M", MARUTI, SUNPHARMA, HCLTECH, TITAN, ULTRACEMCO, NTPC,
-               POWERGRID, ONGC, TATASTEEL, ASIANPAINT, ADANIENT, ADANIPORTS, BAJAJFINSV, WIPRO, NESTLEIND, COALINDIA,
-               JSWSTEEL, GRASIM, TECHM, HINDALCO, DRREDDY, CIPLA, SBILIFE, HDFCLIFE, EICHERMOT, APOLLOHOSP,
-               TATACONSUM, BAJAJ-AUTO, SHRIRAMFIN, BEL, TRENT, INDIGO, ETERNAL, JIOFIN, TMPV, MAXHEALTH]
+    top-n: 6              # max bullish and max "avoid" stocks per market-cap section
+    # Stocks to scan. Empty = the bundled NSE lists (resources/indices): Nifty 500, reported as
+    # Large cap (Nifty 100) · Mid cap (Nifty Midcap 100) · Small cap (Nifty Smallcap 100) · other Nifty 500.
+    # Or list your own symbols here, e.g. [RELIANCE, TCS, INFY] (reported as one unsegmented list).
+    universe: []
     results-warning-days: 15   # warn when a setup has results inside your typical holding period
 
   events:
@@ -205,10 +203,11 @@ marketpulse:
       - { name: "Bank Nifty (prev close)", symbol: "^NSEBANK" }
 
   positional:
-    top-n: 5                  # max stocks per list in the Sunday report
+    top-n: 6                  # max stocks per market-cap section in the Sunday report
     results-warning-days: 14  # suggest waiting for results due within two weeks
     universe: []              # empty = same stocks as swing.universe
 
   btst:
-    top-n: 3          # BTST is selective - at most 3 candidates
+    top-n: 3                  # max candidates per section; only STRONG setups (score 80+) qualify for overnight risk
+    intraday-per-segment: 10  # best daily pre-scores per section that get 15-min bars (keeps 500 stocks to ~4 min)
     universe: []      # empty = same stocks as swing.universe

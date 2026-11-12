@@ -10,6 +10,9 @@ import com.marketpulse.market.MarketDataClient;
 import com.marketpulse.market.TestCandles;
 import com.marketpulse.reports.ReportStore;
 import com.marketpulse.signals.TradeStyle;
+import com.marketpulse.universe.IndexMember;
+import com.marketpulse.universe.Segment;
+import com.marketpulse.universe.Universe;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -107,11 +110,35 @@ class PositionalScanServiceTest {
     }
 
     @Test
+    void reportsEachMarketCapSegmentSeparately() {
+        data.put("^NSEI", TestCandles.trend(600, 20000, 0.0003, 0, FRIDAY));
+        data.put("NIFTY_MIDCAP_100.NS", TestCandles.trend(600, 50000, 0.0005, 0, FRIDAY));
+        data.put("LEADER", TestCandles.trend(600, 100, 0.002, 1_000, FRIDAY));
+        data.put("MIDLEADER", TestCandles.trend(600, 100, 0.0025, 1_000, FRIDAY));
+        Universe universe = Universe.of(List.of(m("LEADER")), List.of(m("MIDLEADER")), List.of(),
+                List.of(m("LEADER"), m("MIDLEADER")));
+
+        new PositionalScanService(market, new PositionalCalculator(), new PositionalScorer(), dispatcher, calendar,
+                clock, new PositionalSettings(universe, "^NSEI", 6, 14), store).run();
+
+        String body = bodies.getFirst();
+        // no Nifty 100 index history here: fall back to the segment's own stocks
+        assertThat(body).containsPattern("🔵 LARGE CAP · Nifty 100 stocks: median \\+\\d+\\.\\d% over 6 months · 1 scanned")
+                .containsPattern("🟣 MID CAP · Nifty Midcap 100 \\+\\d+\\.\\d% over 6 months · 1 scanned");
+        assertThat(store.latestScan(TradeStyle.POSITIONAL).orElseThrow().sections())
+                .extracting(s -> s.segment()).containsExactly(Segment.LARGE, Segment.MID);
+    }
+
+    @Test
     void indexUnavailableMeansNoReport() {
         PositionalRunSummary summary = service(List.of("LEADER"), 5).run();
 
         assertThat(summary.sent()).isFalse();
         assertThat(subjects).isEmpty();
+    }
+
+    private static IndexMember m(String symbol) {
+        return new IndexMember(symbol, symbol, "");
     }
 
     private PositionalScanService service(List<String> universe, int topN) {

@@ -1,4 +1,4 @@
-import type { Dashboard, Holding, HoldingsView, JobName, NewHolding, Performance } from './types'
+import type { Dashboard, Holding, HoldingsView, JobName, NewHolding, OwnedPosition, Performance, Prediction, PredictionSource, ScorecardView, StockAnalysis, UniverseEntry } from './types'
 
 /** The dashboard token was missing or wrong. */
 export class UnauthorizedError extends Error {
@@ -30,6 +30,12 @@ export interface Api {
   getHoldings(token: string): Promise<HoldingsView>
   addHolding(token: string, holding: NewHolding): Promise<Holding>
   deleteHolding(token: string, id: number): Promise<void>
+  getUniverse(token: string): Promise<UniverseEntry[]>
+  analyze(token: string, symbol: string, owned?: OwnedPosition): Promise<StockAnalysis>
+  explain(token: string, symbol: string, owned?: OwnedPosition): Promise<string>
+  getScorecard(token: string, source: PredictionSource): Promise<ScorecardView>
+  getPredictionDates(token: string, source: PredictionSource): Promise<string[]>
+  getPredictions(token: string, date: string, source: PredictionSource): Promise<Prediction[]>
   runJob(token: string, job: JobName): Promise<void>
 }
 
@@ -46,9 +52,9 @@ export function createApi(baseUrl: string): Api {
       throw new UnavailableError()
     }
     if (response.status === 401) throw new UnauthorizedError()
-    if (response.status === 400) {
+    if (response.status === 400 || response.status === 404) {
       const details = await response.json().catch(() => ({})) as { error?: string }
-      throw new ValidationError(details.error ?? 'The server rejected the request')
+      throw new ValidationError(details.error ?? (response.status === 404 ? 'Not found' : 'The server rejected the request'))
     }
     if (response.status >= 500) throw new UnavailableError(`Server returned ${response.status}`)
     if (!response.ok) throw new Error(`Request failed: ${response.status}`)
@@ -75,8 +81,41 @@ export function createApi(baseUrl: string): Api {
     async deleteHolding(token, id) {
       await call(`/api/holdings/${id}`, token, { method: 'DELETE' })
     },
+    async getUniverse(token) {
+      const response = await call('/api/universe', token)
+      return (await response.json()) as UniverseEntry[]
+    },
+    async analyze(token, symbol, owned) {
+      const response = await call(analysisPath(symbol, owned), token)
+      return (await response.json()) as StockAnalysis
+    },
+    async explain(token, symbol, owned) {
+      const path = analysisPath(symbol, owned).replace('?', '/explain?').replace(/^([^?]*)$/, '$1/explain')
+      const response = await call(path, token, { method: 'POST' })
+      return ((await response.json()) as { text: string }).text
+    },
+    async getScorecard(token, source) {
+      return (await (await call(`/api/predictions/scorecard?source=${source}`, token)).json()) as ScorecardView
+    },
+    async getPredictionDates(token, source) {
+      return (await (await call(`/api/predictions/dates?source=${source}`, token)).json()) as string[]
+    },
+    async getPredictions(token, date, source) {
+      return (await (await call(`/api/predictions?date=${date}&source=${source}`, token)).json()) as Prediction[]
+    },
     async runJob(token, job) {
       await call(`/api/run/${job}`, token, { method: 'POST' })
     },
   }
+}
+
+/** /api/analyze/{symbol} with your position (if any) as query parameters. */
+function analysisPath(symbol: string, owned?: OwnedPosition) {
+  const path = `/api/analyze/${encodeURIComponent(symbol)}`
+  if (!owned) return path
+  const params = new URLSearchParams({
+    buyPrice: String(owned.buyPrice), buyDate: owned.buyDate, quantity: String(owned.quantity), horizon: owned.horizon,
+  })
+  if (owned.stopLoss != null) params.set('stopLoss', String(owned.stopLoss))
+  return `${path}?${params}`
 }

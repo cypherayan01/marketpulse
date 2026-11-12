@@ -20,7 +20,7 @@ public class BackgroundJobs {
         executor.submit(() -> {
             try {
                 job.run();
-            } catch (RuntimeException e) {
+            } catch (Throwable e) { // incl. Errors: submit() would otherwise swallow them silently
                 log.error("{} failed", name, e);
             }
         });

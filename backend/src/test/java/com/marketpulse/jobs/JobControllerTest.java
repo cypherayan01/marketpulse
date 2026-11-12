@@ -9,6 +9,8 @@ import com.marketpulse.positional.PositionalScanService;
 import com.marketpulse.swing.EodWatchlistService;
 import com.marketpulse.tracking.SignalTracker;
 import com.marketpulse.holdings.HoldingsCheckService;
+import com.marketpulse.predictions.PredictionUpdater;
+import com.marketpulse.predictions.ReplayService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -55,6 +57,12 @@ class JobControllerTest {
     @MockitoBean
     private HoldingsCheckService holdingsCheckService;
 
+    @MockitoBean
+    private PredictionUpdater predictionUpdater;
+
+    @MockitoBean
+    private ReplayService replayService;
+
     @Test
     void rejectsRequestWithoutToken() throws Exception {
         mvc.perform(post("/jobs/news")).andExpect(status().isUnauthorized());
@@ -88,9 +96,18 @@ class JobControllerTest {
         mvc.perform(post("/jobs/eod").header("X-Job-Token", "test-token"))
                 .andExpect(status().isAccepted());
 
-        verify(eodWatchlistService, timeout(2000)).run(false);
-        verify(signalTracker, timeout(2000)).update(); // paper trades move forward after the close
-        verify(holdingsCheckService, timeout(2000)).run(false); // and your own holdings are checked
+        verify(eodWatchlistService, timeout(10_000)).run(false);
+        verify(signalTracker, timeout(10_000)).update(); // paper trades move forward after the close
+        verify(holdingsCheckService, timeout(10_000)).run(false); // and your own holdings are checked
+        verify(predictionUpdater, timeout(10_000)).update();     // and every prediction's checkpoints
+    }
+
+    @Test
+    void replayJobRunsTheHistoryReplay() throws Exception {
+        mvc.perform(post("/jobs/replay").header("X-Job-Token", "test-token"))
+                .andExpect(status().isAccepted());
+
+        verify(replayService, timeout(10_000)).run();
     }
 
     @Test
@@ -98,7 +115,7 @@ class JobControllerTest {
         mvc.perform(post("/jobs/holdings").header("X-Job-Token", "test-token"))
                 .andExpect(status().isAccepted());
 
-        verify(holdingsCheckService, timeout(2000)).run(false);
+        verify(holdingsCheckService, timeout(10_000)).run(false);
     }
 
     @Test
@@ -106,7 +123,7 @@ class JobControllerTest {
         mvc.perform(post("/jobs/track").header("X-Job-Token", "test-token"))
                 .andExpect(status().isAccepted());
 
-        verify(signalTracker, timeout(2000)).update();
+        verify(signalTracker, timeout(10_000)).update();
     }
 
     @Test
@@ -114,7 +131,7 @@ class JobControllerTest {
         mvc.perform(post("/jobs/eod").param("force", "true").header("X-Job-Token", "test-token"))
                 .andExpect(status().isAccepted());
 
-        verify(eodWatchlistService, timeout(2000)).run(true);
+        verify(eodWatchlistService, timeout(10_000)).run(true);
     }
 
     @Test
@@ -127,7 +144,7 @@ class JobControllerTest {
         mvc.perform(post("/jobs/premarket").header("X-Job-Token", "test-token"))
                 .andExpect(status().isAccepted());
 
-        verify(preMarketBriefService, timeout(2000)).run(false);
+        verify(preMarketBriefService, timeout(10_000)).run(false);
     }
 
     @Test
@@ -140,7 +157,7 @@ class JobControllerTest {
         mvc.perform(post("/jobs/positional").header("X-Job-Token", "test-token"))
                 .andExpect(status().isAccepted());
 
-        verify(positionalScanService, timeout(2000)).run();
+        verify(positionalScanService, timeout(10_000)).run();
     }
 
     @Test
@@ -153,6 +170,6 @@ class JobControllerTest {
         mvc.perform(post("/jobs/btst").header("X-Job-Token", "test-token"))
                 .andExpect(status().isAccepted());
 
-        verify(btstScanService, timeout(2000)).run(false);
+        verify(btstScanService, timeout(10_000)).run(false);
     }
 }

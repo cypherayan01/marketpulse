@@ -34,3 +34,6 @@ build/
 
 ### secrets ###
 .env
+
+### local H2 database ###
+data/

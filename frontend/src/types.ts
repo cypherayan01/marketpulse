@@ -35,6 +35,16 @@ export interface MarketEvent {
   source: 'CONFIG' | 'NEWS'
 }
 
+export type Segment = 'LARGE' | 'MID' | 'SMALL' | 'OTHER'
+
+export interface Section {
+  segment: Segment
+  indexLine: string | null
+  scanned: number
+  bullish: TradeSignal[]
+  bearish: TradeSignal[]
+}
+
 export interface ScanReport {
   style: TradeStyle
   generatedAt: string // ISO instant
@@ -47,6 +57,8 @@ export interface ScanReport {
   scanned: number
   failed: string[]
   notes: string[]
+  /** Large / mid / small / other Nifty 500 - empty for reports saved before segments existed */
+  sections: Section[]
 }
 
 export interface CueReading {
@@ -91,7 +103,7 @@ export interface Dashboard {
   events: MarketEvent[]
 }
 
-export type JobName = 'news' | 'premarket' | 'eod' | 'positional' | 'btst' | 'track' | 'holdings'
+export type JobName = 'news' | 'premarket' | 'eod' | 'positional' | 'btst' | 'track' | 'holdings' | 'replay' | 'predictions'
 
 export type TradeStatus = 'OPEN' | 'TARGET_HIT' | 'STOPPED' | 'EXPIRED'
 
@@ -113,6 +125,7 @@ export interface TrackedSignal {
   maxGainPct: number
   maxLossPct: number
   sessionsHeld: number
+  segment: Segment | null
 }
 
 export interface Bucket {
@@ -138,6 +151,7 @@ export interface StyleStats {
   worstPct: number
   byScore: Bucket[]
   byConfidence: Bucket[]
+  bySegment: Bucket[]
 }
 
 export interface Performance {
@@ -180,4 +194,88 @@ export interface HoldingCheck {
 export interface HoldingsView {
   holdings: Holding[]
   latestCheck: { generatedAt: string; session: string; checks: HoldingCheck[]; failed: string[] } | null
+}
+
+export type AnalysisVerdict = 'BUY' | 'BUY_SWING' | 'ACCUMULATE' | 'WAIT' | 'AVOID'
+
+export interface StockAnalysis {
+  symbol: string
+  name: string
+  industry: string
+  segment: Segment | null
+  price: number
+  priceDate: string
+  dayChangePct: number
+  verdict: AnalysisVerdict
+  headline: string
+  reasons: string[]
+  swing: TradeSignal | null
+  positional: TradeSignal | null
+  positionalUnavailable: string | null
+  holding: HoldingCheck | null
+  resultsDate: string | null
+  news: NewsEntry[]
+  generatedAt: string
+}
+
+export interface OwnedPosition {
+  quantity: number
+  buyPrice: number
+  buyDate: string
+  horizon: Horizon
+  stopLoss: number | null
+}
+
+export interface UniverseEntry {
+  symbol: string
+  name: string
+  segment: Segment
+}
+
+export type PredictionSource = 'LIVE' | 'REPLAY'
+export type Call = 'BUY' | 'AVOID'
+
+export interface Prediction {
+  id: number
+  source: PredictionSource
+  style: TradeStyle
+  symbol: string
+  segment: Segment | null
+  signalDate: string
+  score: number
+  classification: Classification
+  call: Call
+  price: number
+  niftyPrice: number
+  newsSentiment: number
+  /** stock % change after N sessions, keyed by N */
+  returns: Record<string, number>
+  niftyReturns: Record<string, number>
+  nextOpenPct: number | null
+  nextHighPct: number | null
+}
+
+export interface Checkpoint { sessions: number; measured: number; hitRatePct: number; avgEdgePct: number; avgReturnPct: number }
+export interface Breakdown { label: string; measured: number; hitRatePct: number; avgEdgePct: number }
+export interface NextMorning { measured: number; gapUpPct: number; avgOpenPct: number; avgHighPct: number }
+
+export interface StyleScorecard {
+  style: TradeStyle
+  predictions: number
+  checkpoints: Checkpoint[]
+  keySessions: number
+  byCall: Breakdown[]
+  byScore: Breakdown[]
+  bySegment: Breakdown[]
+  byNews: Breakdown[]
+  nextMorning: NextMorning
+}
+
+export interface ScorecardView {
+  source: PredictionSource
+  predictions: number
+  firstDate: string | null
+  lastDate: string | null
+  styles: StyleScorecard[]
+  caveat: string | null
 }

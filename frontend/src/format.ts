@@ -6,6 +6,11 @@ export const rupees = (value: number) => rupeeFormat.format(value)
 
 export const number = (value: number) => numberFormat.format(value)
 
+const wholeRupees = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })
+
+/** Compact price for cards: ₹19,872 from ₹1,000 up (paise don't matter there), ₹806.60 below. */
+export const price = (value: number) => (Math.abs(value) >= 1000 ? wholeRupees.format(value) : rupees(value))
+
 /** Rounds to 2 decimals and turns -0 into 0, so tiny negative values don't show as "-0.00". */
 const round2 = (value: number) => Math.round(value * 100) / 100 || 0
 
@@ -39,6 +44,11 @@ export function shortDate(isoDate: string) {
     .toLocaleDateString('en-GB', { day: '2-digit', month: 'short', timeZone: 'UTC' })
 }
 
+/** "07 Nov 2025" from "2025-11-07" - for ranges that can span years. */
+export function longDate(isoDate: string) {
+  return `${shortDate(isoDate)} ${isoDate.slice(0, 4)}`
+}
+
 /** "Fri 04 Dec" from "2026-12-04". */
 export function weekdayDate(isoDate: string) {
   const [year, month, day] = isoDate.split('-').map(Number)
@@ -59,3 +69,11 @@ export function label(value: string) {
   const words = value.toLowerCase().replace('_', ' ')
   return words.charAt(0).toUpperCase() + words.slice(1)
 }
+
+/** Market-cap segments as shown in the UI (mirrors the backend's Segment enum). */
+export const SEGMENTS = {
+  LARGE: { title: 'Large cap', index: 'Nifty 100', icon: '🔵' },
+  MID: { title: 'Mid cap', index: 'Nifty Midcap 100', icon: '🟣' },
+  SMALL: { title: 'Small cap', index: 'Nifty Smallcap 100', icon: '🟠' },
+  OTHER: { title: 'Other Nifty 500', index: 'Nifty 500', icon: '⚪' },
+} as const

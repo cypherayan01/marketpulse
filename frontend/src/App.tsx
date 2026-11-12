@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { UnauthorizedError, UnavailableError, type Api } from './api'
 import { Dashboard } from './components/Dashboard'
 import { LoginForm } from './components/LoginForm'
-import type { Dashboard as DashboardData, HoldingsView, JobName, NewHolding, Performance } from './types'
+import type { Dashboard as DashboardData, HoldingsView, JobName, NewHolding, OwnedPosition, Performance, PredictionSource, ScorecardView, UniverseEntry } from './types'
 
 const TOKEN_KEY = 'marketpulse.token'
 const MAX_WAKE_ATTEMPTS = 12 // ~2 minutes at the default delay; Render usually wakes in about one
@@ -12,7 +12,7 @@ type State =
   | { kind: 'loading' }
   | { kind: 'waking'; attempt: number }
   | { kind: 'error'; message: string }
-  | { kind: 'ready'; data: DashboardData; performance: Performance | null; holdings: HoldingsView | null }
+  | { kind: 'ready'; data: DashboardData; performance: Performance | null; holdings: HoldingsView | null; universe: UniverseEntry[]; scorecard: ScorecardView | null; predictionDates: string[] }
 
 interface Props {
   api: Api
@@ -36,11 +36,14 @@ export default function App({ api, retryDelayMs = 10_000 }: Props) {
       try {
         const data = await api.getDashboard(currentToken)
         // The track record lives in the database; if it can't be read, still show the rest of the dashboard.
-        const [performance, holdings] = await Promise.all([
+        const [performance, holdings, universe, scorecard, predictionDates] = await Promise.all([
           api.getPerformance(currentToken).catch(() => null),
           api.getHoldings(currentToken).catch(() => null),
+          api.getUniverse(currentToken).catch(() => [] as UniverseEntry[]),
+          api.getScorecard(currentToken, 'LIVE').catch(() => null),
+          api.getPredictionDates(currentToken, 'LIVE').catch(() => [] as string[]),
         ])
-        setState({ kind: 'ready', data, performance, holdings })
+        setState({ kind: 'ready', data, performance, holdings, universe, scorecard, predictionDates })
         return
       } catch (error) {
         if (error instanceof UnauthorizedError) {
@@ -121,7 +124,14 @@ export default function App({ api, retryDelayMs = 10_000 }: Props) {
     case 'ready':
       return (
         <Dashboard data={state.data} performance={state.performance} holdings={state.holdings}
-                   onAddHolding={addHolding} onDeleteHolding={deleteHolding} status={status} onRun={run}
+                   onAddHolding={addHolding} onDeleteHolding={deleteHolding} universe={state.universe}
+                   onAnalyze={(symbol: string, owned?: OwnedPosition) => api.analyze(token!, symbol, owned)}
+                   onExplain={(symbol: string, owned?: OwnedPosition) => api.explain(token!, symbol, owned)}
+                   scorecard={state.scorecard} predictionDates={state.predictionDates}
+                   loadScorecard={(source: PredictionSource) => api.getScorecard(token!, source)}
+                   loadPredictionDates={(source: PredictionSource) => api.getPredictionDates(token!, source)}
+                   loadPredictions={(date: string, source: PredictionSource) => api.getPredictions(token!, date, source)}
+                   status={status} onRun={run}
                    onRefresh={() => token && load(token)} onLogout={() => logout()} />
       )
   }

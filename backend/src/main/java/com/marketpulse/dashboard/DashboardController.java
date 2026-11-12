@@ -16,6 +16,8 @@ import com.marketpulse.tracking.SignalRepository;
 import com.marketpulse.tracking.SignalTracker;
 import com.marketpulse.tracking.TrackedSignal;
 import com.marketpulse.holdings.HoldingsCheckService;
+import com.marketpulse.predictions.PredictionUpdater;
+import com.marketpulse.predictions.ReplayService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -53,7 +55,8 @@ public class DashboardController {
     public DashboardController(ReportStore store, EventCalendar calendar, Clock clock, BackgroundJobs background,
                                MarketPulseProperties props, NewsAlertService news, PreMarketBriefService brief,
                                EodWatchlistService eod, PositionalScanService positional, BtstScanService btst,
-                               SignalRepository signals, SignalTracker tracker, HoldingsCheckService holdingsCheck) {
+                               SignalRepository signals, SignalTracker tracker, HoldingsCheckService holdingsCheck,
+                               PredictionUpdater predictionUpdater, ReplayService replay) {
         this.store = store;
         this.calendar = calendar;
         this.clock = clock;
@@ -67,12 +70,15 @@ public class DashboardController {
                 "eod", () -> {
                     eod.run(false);
                     tracker.update();
+                    predictionUpdater.update();
                     holdingsCheck.run(false);
                 },
                 "positional", positional::run,
                 "btst", () -> btst.run(false),
                 "track", tracker::update,
-                "holdings", () -> holdingsCheck.run(true)); // on demand, e.g. right after adding a holding
+                "holdings", () -> holdingsCheck.run(true), // on demand, e.g. right after adding a holding
+                "replay", replay::run,
+                "predictions", predictionUpdater::update);
     }
 
     @GetMapping("/dashboard")

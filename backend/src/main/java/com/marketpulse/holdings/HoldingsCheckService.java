@@ -39,6 +39,8 @@ public class HoldingsCheckService {
     private final Clock clock;
     private final String indexSymbol;
 
+    private final Object runLock = new Object();
+
     public HoldingsCheckService(HoldingRepository holdings, MarketDataClient market, HoldingEvaluator evaluator,
                                 EventCalendar calendar, AlertDispatcher dispatcher, ReportStore store, Clock clock,
                                 String indexSymbol) {
@@ -53,7 +55,13 @@ public class HoldingsCheckService {
     }
 
     /** @param force run even without a session today */
-    public synchronized HoldingsRunSummary run(boolean force) {
+    public HoldingsRunSummary run(boolean force) {
+        synchronized (runLock) { // private lock: outside code can never hold it
+            return runLocked(force);
+        }
+    }
+
+    private HoldingsRunSummary runLocked(boolean force) {
         List<Holding> owned = holdings.findAll();
         if (owned.isEmpty()) {
             return HoldingsRunSummary.skipped("No holdings - add them on the dashboard");

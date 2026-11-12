@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { UnauthorizedError, UnavailableError, type Api } from './api'
 import App from './App'
-import { dashboard, holdingsView, performance } from './test/fixtures'
+import { dashboard, holdingsView, liveScorecard, performance, stockAnalysis } from './test/fixtures'
 
 function fakeApi(overrides: Partial<Api> = {}): Api {
   return {
@@ -12,6 +12,12 @@ function fakeApi(overrides: Partial<Api> = {}): Api {
     getHoldings: vi.fn().mockResolvedValue(holdingsView),
     addHolding: vi.fn().mockResolvedValue({ ...holdingsView.holdings[0], id: 9, symbol: 'HDFCBANK' }),
     deleteHolding: vi.fn().mockResolvedValue(undefined),
+    getUniverse: vi.fn().mockResolvedValue([{ symbol: 'HDFCBANK', name: 'HDFC Bank Ltd.', segment: 'LARGE' }]),
+    analyze: vi.fn().mockResolvedValue(stockAnalysis),
+    explain: vi.fn().mockResolvedValue('Explained.'),
+    getScorecard: vi.fn().mockResolvedValue(liveScorecard),
+    getPredictionDates: vi.fn().mockResolvedValue(['2026-11-11']),
+    getPredictions: vi.fn().mockResolvedValue([]),
     runJob: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   }
@@ -105,6 +111,39 @@ describe('App', () => {
     expect(api.addHolding).toHaveBeenCalledWith('secret', expect.objectContaining({ symbol: 'HDFCBANK' }))
     expect(api.getHoldings).toHaveBeenCalledTimes(2) // initial load + after adding
     expect(screen.getByRole('status')).toHaveTextContent(/added HDFCBANK/i)
+  })
+
+  it('analyses a stock from its own tab', async () => {
+    localStorage.setItem('marketpulse.token', 'secret')
+    const api = fakeApi()
+    render(<App api={api} />)
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'Analyse a stock' }))
+    await userEvent.type(screen.getByLabelText('Stock symbol'), 'HDFCBANK')
+    await userEvent.click(screen.getByRole('button', { name: 'Analyse' }))
+
+    expect(await screen.findByRole('region', { name: 'Verdict' })).toBeInTheDocument()
+    expect(api.analyze).toHaveBeenCalledWith('secret', 'HDFCBANK', undefined)
+  })
+
+  it('shows the prediction scorecard', async () => {
+    localStorage.setItem('marketpulse.token', 'secret')
+    render(<App api={fakeApi()} />)
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'Predictions' }))
+
+    expect(screen.getByRole('region', { name: 'Swing predictions' })).toBeInTheDocument()
+  })
+
+  it('starts the news check from the News tab', async () => {
+    localStorage.setItem('marketpulse.token', 'secret')
+    const api = fakeApi()
+    render(<App api={api} />)
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'News' }))
+    await userEvent.click(screen.getByRole('button', { name: /check news now/i }))
+
+    await waitFor(() => expect(api.runJob).toHaveBeenCalledWith('secret', 'news'))
   })
 
   it('logs out', async () => {

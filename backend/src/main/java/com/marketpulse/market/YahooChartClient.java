@@ -2,6 +2,7 @@ package com.marketpulse.market;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
@@ -10,6 +11,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Free daily candles from Yahoo Finance's chart endpoint. Unofficial and unauthenticated, so it can change
@@ -47,6 +49,22 @@ public class YahooChartClient implements MarketDataClient, IntradayDataClient {
         return toCandles(symbol, fetchWithRetry(symbol, "2y", "1d"));
     }
 
+    /** From the 1-day chart's metadata: works even for indices Yahoo keeps no daily history for. */
+    @Override
+    public Optional<Quote> quote(String symbol) {
+        ChartResponse response = fetchWithRetry(symbol, "1d", "1d");
+        if (response == null || response.chart() == null || response.chart().result() == null
+                || response.chart().result().isEmpty()) {
+            return Optional.empty();
+        }
+        Meta meta = response.chart().result().getFirst().meta();
+        if (meta == null || meta.regularMarketPrice() == null || meta.chartPreviousClose() == null
+                || meta.chartPreviousClose() == 0) {
+            return Optional.empty();
+        }
+        return Optional.of(new Quote(meta.regularMarketPrice(), meta.chartPreviousClose()));
+    }
+
     @Override
     public List<IntradayCandle> intradayCandles(String symbol) {
         ChartResponse response = fetchWithRetry(symbol, "1d", "15m");
@@ -59,7 +77,7 @@ public class YahooChartClient implements MarketDataClient, IntradayDataClient {
         if (result.timestamp() == null || result.indicators() == null || result.indicators().quote() == null) {
             return bars;
         }
-        Quote q = result.indicators().quote().getFirst();
+        QuoteBars q = result.indicators().quote().getFirst();
         for (int i = 0; i < result.timestamp().size(); i++) {
             Double open = q.open().get(i), high = q.high().get(i), low = q.low().get(i), close = q.close().get(i);
             if (open == null || high == null || low == null || close == null) {
@@ -79,6 +97,11 @@ public class YahooChartClient implements MarketDataClient, IntradayDataClient {
             } catch (HttpClientErrorException.TooManyRequests e) {
                 if (attempt >= RETRY_BACKOFF.size()) {
                     throw new IllegalStateException("Yahoo rate limit hit for " + symbol + ", giving up", e);
+                }
+                sleeper.sleep(RETRY_BACKOFF.get(attempt));
+            } catch (ResourceAccessException e) { // network drop, timeout, connection reset
+                if (attempt >= RETRY_BACKOFF.size()) {
+                    throw new IllegalStateException("Network error fetching " + symbol + ": " + e.getMessage(), e);
                 }
                 sleeper.sleep(RETRY_BACKOFF.get(attempt));
             }
@@ -108,6 +131,27 @@ public class YahooChartClient implements MarketDataClient, IntradayDataClient {
         return toCandles(response.chart().result().getFirst());
     }
 
+    /**
+     * Yahoo sometimes blanks the latest daily bar after hours while its metadata still holds that day's price,
+     * high, low and volume. Rebuild the bar from the metadata - but only if the metadata is from the same day.
+     */
+    private static Optional<Candle> completeFromMeta(LocalDate date, Double open, List<Candle> earlier, Meta meta) {
+        if (meta == null || meta.regularMarketTime() == null || meta.regularMarketPrice() == null
+                || meta.regularMarketDayHigh() == null || meta.regularMarketDayLow() == null) {
+            return Optional.empty();
+        }
+        LocalDate metaDate = Instant.ofEpochSecond(meta.regularMarketTime()).atZone(IST).toLocalDate();
+        if (!metaDate.equals(date)) {
+            return Optional.empty();
+        }
+        double close = meta.regularMarketPrice();
+        double o = open != null ? open : earlier.isEmpty() ? close : earlier.getLast().close();
+        double high = Math.max(meta.regularMarketDayHigh(), Math.max(o, close));
+        double low = Math.min(meta.regularMarketDayLow(), Math.min(o, close));
+        long volume = meta.regularMarketVolume() == null ? 0 : meta.regularMarketVolume();
+        return Optional.of(new Candle(date, o, high, low, close, volume));
+    }
+
     private static void sleepQuietly(Duration duration) {
         try {
             Thread.sleep(duration);
@@ -126,14 +170,18 @@ public class YahooChartClient implements MarketDataClient, IntradayDataClient {
         if (result.timestamp() == null || result.indicators() == null || result.indicators().quote() == null) {
             return candles;
         }
-        Quote q = result.indicators().quote().getFirst();
-        for (int i = 0; i < result.timestamp().size(); i++) {
+        QuoteBars q = result.indicators().quote().getFirst();
+        int last = result.timestamp().size() - 1;
+        for (int i = 0; i <= last; i++) {
             Double open = q.open().get(i), high = q.high().get(i), low = q.low().get(i), close = q.close().get(i);
+            LocalDate date = Instant.ofEpochSecond(result.timestamp().get(i)).atZone(IST).toLocalDate();
             if (open == null || high == null || low == null || close == null) {
+                if (i == last) {
+                    completeFromMeta(date, open, candles, result.meta()).ifPresent(candles::add);
+                }
                 continue; // Yahoo leaves gaps as nulls
             }
             Long volume = q.volume().get(i);
-            LocalDate date = Instant.ofEpochSecond(result.timestamp().get(i)).atZone(IST).toLocalDate();
             candles.add(new Candle(date, open, high, low, close, volume == null ? 0 : volume));
         }
         return candles;
@@ -148,14 +196,19 @@ public class YahooChartClient implements MarketDataClient, IntradayDataClient {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record Result(List<Long> timestamp, Indicators indicators) {
+    record Result(Meta meta, List<Long> timestamp, Indicators indicators) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record Indicators(List<Quote> quote) {
+    record Meta(Long regularMarketTime, Double regularMarketPrice, Double regularMarketDayHigh,
+                Double regularMarketDayLow, Long regularMarketVolume, Double chartPreviousClose) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record Quote(List<Double> open, List<Double> high, List<Double> low, List<Double> close, List<Long> volume) {
+    record Indicators(List<QuoteBars> quote) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record QuoteBars(List<Double> open, List<Double> high, List<Double> low, List<Double> close, List<Long> volume) {
     }
 }

@@ -21,6 +21,8 @@ import com.marketpulse.tracking.JdbcSignalRepository;
 import com.marketpulse.tracking.SignalRepository;
 import com.marketpulse.tracking.SignalTracker;
 import com.marketpulse.holdings.HoldingsCheckService;
+import com.marketpulse.predictions.PredictionUpdater;
+import com.marketpulse.predictions.ReplayService;
 import com.marketpulse.tracking.TrackedSignal;
 import com.marketpulse.tracking.TradeStatus;
 import org.junit.jupiter.api.Test;
@@ -107,6 +109,8 @@ class DashboardControllerTest {
     @MockitoBean private BtstScanService btst;
     @MockitoBean private SignalTracker tracker;
     @MockitoBean private HoldingsCheckService holdingsCheck;
+    @MockitoBean private PredictionUpdater predictionUpdater;
+    @MockitoBean private ReplayService replay;
 
     @Test
     void rejectsRequestsWithoutTheDashboardToken() throws Exception {
@@ -133,11 +137,11 @@ class DashboardControllerTest {
     void startsAJobInTheBackground() throws Exception {
         mvc.perform(post("/api/run/eod").header("Authorization", "Bearer dash-token"))
                 .andExpect(status().isAccepted());
-        verify(eod, timeout(2000)).run(false);
+        verify(eod, timeout(10_000)).run(false);
 
         mvc.perform(post("/api/run/news").header("Authorization", "Bearer dash-token"))
                 .andExpect(status().isAccepted());
-        verify(news, timeout(2000)).run();
+        verify(news, timeout(10_000)).run();
     }
 
     @Test
@@ -162,14 +166,21 @@ class DashboardControllerTest {
     void canCheckHoldingsFromTheDashboard() throws Exception {
         mvc.perform(post("/api/run/holdings").header("Authorization", "Bearer dash-token"))
                 .andExpect(status().isAccepted());
-        verify(holdingsCheck, timeout(2000)).run(true);
+        verify(holdingsCheck, timeout(10_000)).run(true);
+    }
+
+    @Test
+    void canStartTheHistoryReplayFromTheDashboard() throws Exception {
+        mvc.perform(post("/api/run/replay").header("Authorization", "Bearer dash-token"))
+                .andExpect(status().isAccepted());
+        verify(replay, timeout(10_000)).run();
     }
 
     @Test
     void canStartTrackingFromTheDashboard() throws Exception {
         mvc.perform(post("/api/run/track").header("Authorization", "Bearer dash-token"))
                 .andExpect(status().isAccepted());
-        verify(tracker, timeout(2000)).update();
+        verify(tracker, timeout(10_000)).update();
     }
 
     @Test

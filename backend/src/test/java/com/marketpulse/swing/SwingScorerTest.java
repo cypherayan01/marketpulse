@@ -163,6 +163,19 @@ class SwingScorerTest {
     }
 
     @Test
+    void withoutA200DayEmaTheLongTermTrendIsNeitherRewardedNorPenalised() {
+        SnapshotBuilder b = SnapshotBuilder.bullishBreakout();
+        b.ema200 = Double.NaN;
+        b.bars = 150;
+
+        TradeSignal signal = scorer.score(b.build(), NIFTY_3M);
+
+        assertThat(signal.bullishFactors()).noneMatch(r -> r.contains("200-day"));
+        assertThat(signal.bearishFactors()).noneMatch(r -> r.contains("200-day"));
+        assertThat(signal.classification().bullish()).isTrue();
+    }
+
+    @Test
     void shortHistoryMeansLowConfidence() {
         SnapshotBuilder b = SnapshotBuilder.bullishBreakout();
         b.bars = 150; // 200-day EMA not reliable yet

@@ -3,6 +3,7 @@ package com.marketpulse.tracking;
 import com.marketpulse.signals.Classification;
 import com.marketpulse.signals.Confidence;
 import com.marketpulse.signals.TradeStyle;
+import com.marketpulse.universe.Segment;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -56,6 +57,22 @@ class PerformanceCalculatorTest {
                         org.assertj.core.groups.Tuple.tuple("65-79", 1));
         assertThat(swing.byScore().getFirst().winRatePct()).isCloseTo(50.0, within(1e-9));
         assertThat(swing.byConfidence()).extracting(Bucket::label).containsExactly("HIGH", "MEDIUM");
+    }
+
+    @Test
+    void comparesResultsByMarketCapSegment() {
+        List<TrackedSignal> trades = List.of(
+                closed(TradeStyle.SWING, 90, Confidence.HIGH, TradeStatus.TARGET_HIT, 10).withSegment(Segment.LARGE),
+                closed(TradeStyle.SWING, 85, Confidence.HIGH, TradeStatus.STOPPED, -5).withSegment(Segment.SMALL),
+                closed(TradeStyle.SWING, 80, Confidence.HIGH, TradeStatus.STOPPED, -4).withSegment(Segment.SMALL),
+                closed(TradeStyle.SWING, 75, Confidence.HIGH, TradeStatus.EXPIRED, 1)); // recorded before segments
+
+        StyleStats swing = calculator.summarize(trades).getFirst();
+
+        assertThat(swing.bySegment()).extracting(Bucket::label, Bucket::closed)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("Large cap", 1),
+                        org.assertj.core.groups.Tuple.tuple("Small cap", 2));
+        assertThat(swing.bySegment().get(1).avgReturnPct()).isCloseTo(-4.5, within(1e-9));
     }
 
     @Test

@@ -90,6 +90,39 @@ class IndicatorCalculatorTest {
     }
 
     @Test
+    void twoHundredDayEmaIsMissingRatherThanMisleadingWithLessHistory() {
+        IndicatorSnapshot s = calculator.calculate("NEWIPO", TestCandles.trend(150, 100, 0.004, 1_000, DAY));
+
+        assertThat(s.ema200()).isNaN();
+        assertThat(s.ema50()).isLessThan(s.close());
+    }
+
+    @Test
+    void snapshotsForEveryPastDayNeverUseLaterData() {
+        // a bumpy series: trend + swings, so every indicator moves
+        List<Candle> candles = new ArrayList<>();
+        double price = 100;
+        for (int i = 0; i < 320; i++) {
+            double move = 0.002 + 0.03 * Math.sin(i / 7.0);
+            double open = price;
+            price = price * (1 + move / 3);
+            candles.add(new Candle(DAY.minusDays(319 - i), open, Math.max(open, price) * 1.01,
+                    Math.min(open, price) * 0.99, price, 1_000 + (i % 13) * 300));
+        }
+
+        List<IndicatorSnapshot> history = calculator.snapshotsFrom("BUMPY", candles, 250);
+
+        assertThat(history).hasSize(70);
+        for (IndicatorSnapshot past : history) {
+            int index = candles.indexOf(candles.stream().filter(c -> c.date().equals(past.date())).findFirst().orElseThrow());
+            IndicatorSnapshot onlyDataUpToThatDay = calculator.calculate("BUMPY", candles.subList(0, index + 1));
+            assertThat(past).usingRecursiveComparison()
+                    .withComparatorForType((a, b) -> Math.abs(a - b) < 1e-6 || (a.isNaN() && b.isNaN()) ? 0 : 1, Double.class)
+                    .isEqualTo(onlyDataUpToThatDay);
+        }
+    }
+
+    @Test
     void rejectsSeriesTooShortForIndicators() {
         assertThatThrownBy(() -> calculator.calculate("NEW", TestCandles.trend(40, 100, 0.01, 1_000, DAY)))
                 .isInstanceOf(IllegalArgumentException.class)

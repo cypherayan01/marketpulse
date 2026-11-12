@@ -32,6 +32,8 @@ public class NewsAlertService {
     private final Clock clock;
     private final NewsAlertSettings settings;
     private final ReportStore store;
+    /** Private lock (not a synchronized method) so no outside code can hold it and stall a poll. */
+    private final Object runLock = new Object();
 
     public NewsAlertService(List<NewsSource> sources, NewsRelevanceFilter filter, SeenNewsRegistry seen,
                             NewsImpactAnalyzer analyzer, AlertDispatcher dispatcher, EventCalendar calendar,
@@ -47,7 +49,13 @@ public class NewsAlertService {
         this.store = store;
     }
 
-    public synchronized NewsRunSummary run() {
+    public NewsRunSummary run() {
+        synchronized (runLock) {
+            return runOnce();
+        }
+    }
+
+    private NewsRunSummary runOnce() {
         List<NewsItem> fetched = fetchAll();
 
         Instant cutoff = clock.instant().minus(settings.lookback());

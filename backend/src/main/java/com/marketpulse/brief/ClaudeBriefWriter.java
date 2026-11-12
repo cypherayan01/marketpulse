@@ -10,6 +10,8 @@ import com.marketpulse.news.NewsItem;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
+import com.marketpulse.signals.PlainText;
+
 import java.util.stream.Collectors;
 
 /**
@@ -26,7 +28,8 @@ public class ClaudeBriefWriter implements BriefWriter {
             Use ONLY the numbers, headlines and events provided. Never invent prices, levels, percentages, \
             dates or news. If something important is missing, say it is unavailable rather than guessing.
 
-            Format: plain text, no markdown tables, no headings with #. At most ~250 words. Structure:
+            Format: plain text with no Markdown at all (no asterisks, bold, # headings or tables) - it is shown \
+            exactly as written. At most ~250 words. Structure:
             1. One line: overall mood for Indian equities today (Positive / Negative / Mixed / Cautious) and why.
             2. "Key drivers:" 2-4 short bullets linking global moves and news to India (e.g. crude -> OMCs, \
             aviation, paints; US tech -> Indian IT; dollar/yields -> FII flows; Asia -> opening sentiment).
@@ -67,8 +70,8 @@ public class ClaudeBriefWriter implements BriefWriter {
         String text = response.content().stream()
                 .flatMap(block -> block.text().stream())
                 .map(t -> t.text())
-                .collect(Collectors.joining("\n"))
-                .strip();
+                .collect(Collectors.joining("\n"));
+        text = PlainText.from(text); // Telegram and the dashboard show text as-is
         if (text.isEmpty()) {
             throw new IllegalStateException("Claude returned an empty brief");
         }

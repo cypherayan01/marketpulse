@@ -3,6 +3,7 @@ package com.marketpulse.tracking;
 import com.marketpulse.signals.Classification;
 import com.marketpulse.signals.Confidence;
 import com.marketpulse.signals.TradeStyle;
+import com.marketpulse.universe.Segment;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,6 +42,16 @@ class JdbcSignalRepositoryTest {
         assertThat(saved.classification()).isEqualTo(Classification.STRONG_BULLISH);
         assertThat(saved.entry()).isCloseTo(806.6, within(1e-9));
         assertThat(saved.createdAt()).isEqualTo(Instant.parse("2026-11-11T11:00:00Z"));
+    }
+
+    @Test
+    void keepsTheMarketCapSegment() {
+        repository.saveIfNew(trade(TradeStyle.SWING, "AARTIIND", DAY).withSegment(Segment.SMALL));
+        repository.saveIfNew(trade(TradeStyle.SWING, "OLDROW", DAY)); // trades recorded before segments existed
+
+        assertThat(repository.findAll()).extracting(TrackedSignal::symbol, TrackedSignal::segment)
+                .containsExactlyInAnyOrder(org.assertj.core.groups.Tuple.tuple("AARTIIND", Segment.SMALL),
+                        org.assertj.core.groups.Tuple.tuple("OLDROW", null));
     }
 
     @Test

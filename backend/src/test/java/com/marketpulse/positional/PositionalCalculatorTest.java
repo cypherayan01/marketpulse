@@ -54,6 +54,28 @@ class PositionalCalculatorTest {
     }
 
     @Test
+    void weeklySnapshotsForPastWeeksNeverUseLaterData() {
+        List<Candle> daily = new ArrayList<>();
+        double price = 100;
+        for (int i = 0; i < 600; i++) {
+            double open = price;
+            price = price * (1 + 0.001 + 0.02 * Math.sin(i / 9.0) / 3);
+            daily.add(new Candle(FRIDAY.minusDays(599 - i), open, Math.max(open, price) * 1.01,
+                    Math.min(open, price) * 0.99, price, 1_000 + (i % 11) * 200));
+        }
+
+        List<PositionalSnapshot> history = calculator.weeklySnapshots("BUMPY", daily, 70);
+
+        assertThat(history).isNotEmpty();
+        for (PositionalSnapshot past : history) {
+            List<Candle> upToThatWeek = daily.stream().filter(c -> !c.date().isAfter(past.weekEnding())).toList();
+            assertThat(past).usingRecursiveComparison()
+                    .withComparatorForType((a, b) -> Math.abs(a - b) < 1e-6 || (a.isNaN() && b.isNaN()) ? 0 : 1, Double.class)
+                    .isEqualTo(calculator.calculate("BUMPY", upToThatWeek));
+        }
+    }
+
+    @Test
     void rejectsLessThanAboutTenMonthsOfHistory() {
         assertThatThrownBy(() -> calculator.calculate("NEW", TestCandles.trend(200, 100, 0.01, 1_000, FRIDAY)))
                 .isInstanceOf(IllegalArgumentException.class)

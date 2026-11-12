@@ -1,5 +1,6 @@
-import { label, rupees, shortDate } from '../format'
+import { label, price, shortDate } from '../format'
 import type { TradeSignal } from '../types'
+import { ScoreRing } from './ScoreRing'
 
 interface Props {
   signal: TradeSignal
@@ -16,21 +17,24 @@ export function SignalCard({ signal, resultsDate }: Props) {
   return (
     <article className={`card ${tone}`}>
       <header className="card-head">
-        <h3>{signal.symbol}</h3>
-        <span className="score" aria-label="score">{signal.score}</span>
+        <div>
+          <h3>{signal.symbol}</h3>
+          <p className="meta">
+            <span className={`pill pill-${tone}`}>{label(signal.classification)}</span>{' '}
+            <span>confidence {signal.confidence.toLowerCase()}</span>
+          </p>
+        </div>
+        <ScoreRing score={signal.score} tone={tone} />
       </header>
-      <p className="meta">
-        <span>{label(signal.classification)}</span> · <span>confidence {signal.confidence.toLowerCase()}</span>
-      </p>
 
       {plan ? (
         <dl className="plan">
-          <div><dt>Entry</dt><dd>{rupees(plan.entry)}</dd></div>
-          <div><dt>Stop</dt><dd>{rupees(plan.stopLoss)}</dd><dd className="risk">-{plan.riskPct.toFixed(1)}%</dd></div>
-          <div><dt>Target</dt><dd>{rupees(plan.target)}</dd></div>
+          <div><dt>Entry</dt><dd>{price(plan.entry)}</dd></div>
+          <div><dt>Stop</dt><dd>{price(plan.stopLoss)}</dd><dd className="risk">-{plan.riskPct.toFixed(1)}%</dd></div>
+          <div><dt>Target</dt><dd>{price(plan.target)}</dd></div>
         </dl>
       ) : (
-        <p className="meta">Close {rupees(signal.close)}</p>
+        <p className="meta">Close {price(signal.close)}</p>
       )}
 
       <ul className="reasons">

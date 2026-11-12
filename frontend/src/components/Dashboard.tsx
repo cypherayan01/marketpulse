@@ -1,15 +1,37 @@
-import { useState } from 'react'
-import { istTime } from '../format'
-import type { Dashboard as DashboardData, HoldingsView, JobName, NewHolding, Performance } from '../types'
-import { BriefPanel } from './BriefPanel'
+import { useState, type ComponentType } from 'react'
+import {
+  Briefcase, CalendarDays, CalendarRange, LayoutDashboard, LineChart, LogOut, Newspaper, RefreshCw, Search, Target,
+  Trophy, TrendingUp, Zap,
+} from 'lucide-react'
+import { istTime, signedPct, trendClass } from '../format'
+import type {
+  Dashboard as DashboardData, HoldingsView, JobName, NewHolding, OwnedPosition, Performance, Prediction,
+  PredictionSource, ScorecardView, StockAnalysis, UniverseEntry,
+} from '../types'
+import { AnalyzePanel } from './AnalyzePanel'
 import { EventsPanel } from './EventsPanel'
 import { HoldingsPanel } from './HoldingsPanel'
 import { NewsPanel } from './NewsPanel'
+import { Overview } from './Overview'
+import { PredictionsPanel } from './PredictionsPanel'
 import { ScanPanel } from './ScanPanel'
 import { TrackRecordPanel } from './TrackRecordPanel'
 
-const TABS = ['Overview', 'My holdings', 'Swing', 'Positional', 'BTST', 'News', 'Events', 'Track record'] as const
-type Tab = (typeof TABS)[number]
+const TABS: { name: string; icon: ComponentType<{ size?: number }> }[] = [
+  { name: 'Overview', icon: LayoutDashboard },
+  { name: 'Analyse a stock', icon: Search },
+  { name: 'My holdings', icon: Briefcase },
+  { name: 'Swing', icon: TrendingUp },
+  { name: 'Positional', icon: CalendarRange },
+  { name: 'BTST', icon: Zap },
+  { name: 'Predictions', icon: Target },
+  { name: 'Track record', icon: Trophy },
+  { name: 'News', icon: Newspaper },
+  { name: 'Events', icon: CalendarDays },
+]
+
+/** Cues shown in the ticker strip, in this order, when the brief has them. */
+const TICKER = ['Nifty 50 (prev close)', 'Bank Nifty (prev close)', 'India VIX', 'S&P 500', 'Brent crude ($)', 'USD/INR']
 
 interface Props {
   data: DashboardData
@@ -17,82 +39,82 @@ interface Props {
   holdings: HoldingsView | null
   onAddHolding: (holding: NewHolding) => Promise<void>
   onDeleteHolding: (id: number) => Promise<void>
+  universe: UniverseEntry[]
+  onAnalyze: (symbol: string, owned?: OwnedPosition) => Promise<StockAnalysis>
+  onExplain: (symbol: string, owned?: OwnedPosition) => Promise<string>
+  scorecard: ScorecardView | null
+  predictionDates: string[]
+  loadScorecard: (source: PredictionSource) => Promise<ScorecardView>
+  loadPredictionDates: (source: PredictionSource) => Promise<string[]>
+  loadPredictions: (date: string, source: PredictionSource) => Promise<Prediction[]>
   onRun: (job: JobName) => void
   onRefresh: () => void
   onLogout: () => void
   status?: string
 }
 
-export function Dashboard({ data, performance, holdings, onAddHolding, onDeleteHolding, onRun, onRefresh, onLogout, status }: Props) {
-  const [tab, setTab] = useState<Tab>('Overview')
+export function Dashboard(props: Props) {
+  const { data, onRun, onRefresh, onLogout, status } = props
+  const [tab, setTab] = useState('Overview')
+  const cues = TICKER.map((n) => data.brief?.cues.find((c) => c.name === n)).filter((c) => c !== undefined)
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <h1>MarketPulse</h1>
-        <div className="actions">
-          <button type="button" className="secondary" onClick={onRefresh}>Refresh</button>
-          <button type="button" className="secondary" onClick={onLogout}>Log out</button>
+    <div className="shell">
+      <aside className="sidebar">
+        <div className="brand">
+          <span className="brand-mark" aria-hidden="true"><LineChart size={18} /></span>
+          <h1>MarketPulse</h1>
         </div>
-      </header>
-
-      <nav role="tablist" aria-label="Sections" className="tabs">
-        {TABS.map((t) => (
-          <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>{t}</button>
-        ))}
-      </nav>
-
-      <p role="status" className="status">{status}</p>
-
-      <main role="tabpanel" aria-label={tab}>
-        {tab === 'Overview' && <Overview data={data} />}
-        {tab === 'My holdings' && (
-          <HoldingsPanel view={holdings} onAdd={onAddHolding} onDelete={onDeleteHolding} onCheck={() => onRun('holdings')} />
-        )}
-        {tab === 'Swing' && <ScanPanel title="Swing" job="eod" report={data.swing} onRun={onRun} />}
-        {tab === 'Positional' && <ScanPanel title="Positional" job="positional" report={data.positional} onRun={onRun} />}
-        {tab === 'BTST' && <ScanPanel title="BTST" job="btst" report={data.btst} onRun={onRun} />}
-        {tab === 'News' && <NewsPanel news={data.news} />}
-        {tab === 'Events' && <EventsPanel events={data.events} />}
-        {tab === 'Track record' && <TrackRecordPanel performance={performance} />}
-      </main>
-
-      <footer className="footnote">
-        Updated {istTime(data.serverTime)} · Rule-based signals, not predictions. Not investment advice.
-      </footer>
-    </div>
-  )
-}
-
-function Overview({ data }: { data: DashboardData }) {
-  const scans = [
-    { name: 'Swing', report: data.swing },
-    { name: 'Positional', report: data.positional },
-    { name: 'BTST', report: data.btst },
-  ]
-  const alerts = data.news.filter((n) => n.alerted).slice(0, 3)
-  return (
-    <>
-      <BriefPanel brief={data.brief} />
-      <section className="panel">
-        <h2>Latest picks</h2>
-        <ul className="glance">
-          {scans.map(({ name, report }) => (
-            <li key={name}>
-              <strong>{name}:</strong>{' '}
-              {report ? (report.bullish.map((s) => `${s.symbol} (${s.score})`).join(', ') || 'no setups') : 'not run yet'}
-            </li>
+        <nav role="tablist" aria-label="Sections" aria-orientation="vertical" className="nav">
+          {TABS.map(({ name, icon: Icon }) => (
+            <button key={name} type="button" role="tab" aria-selected={tab === name} onClick={() => setTab(name)}>
+              <Icon size={16} aria-hidden="true" /><span>{name}</span>
+            </button>
           ))}
-        </ul>
-      </section>
-      {alerts.length > 0 && (
-        <section className="panel">
-          <h2>Recent alerts</h2>
-          <ul className="glance">
-            {alerts.map((n) => <li key={n.id}>{n.impactScore}/10 · {n.title}</li>)}
-          </ul>
-        </section>
-      )}
-    </>
+        </nav>
+        <div className="sidebar-foot">
+          <button type="button" className="ghost" onClick={onRefresh}><RefreshCw size={15} aria-hidden="true" /> Refresh</button>
+          <button type="button" className="ghost" onClick={onLogout}><LogOut size={15} aria-hidden="true" /> Log out</button>
+        </div>
+      </aside>
+
+      <div className="content">
+        {cues.length > 0 && (
+          <div className="ticker" aria-label="Markets">
+            {cues.map((c) => (
+              <span key={c.symbol} className="tick">
+                <span className="tick-name">{c.name.replace(' (prev close)', '')}</span>
+                <span className="tick-value">{c.last.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                <span className={`tick-change ${trendClass(c.changePct)}`}>{signedPct(c.changePct)}</span>
+              </span>
+            ))}
+            {data.brief && <span className="tick-asof">as of the brief, {istTime(data.brief.generatedAt)}</span>}
+          </div>
+        )}
+        <p role="status" className="status">{status}</p>
+
+        <main role="tabpanel" aria-label={tab} className="page">
+          {tab === 'Overview' && <Overview data={data} holdings={props.holdings} scorecard={props.scorecard} onRun={onRun} onOpen={setTab} />}
+          {tab === 'Analyse a stock' && <AnalyzePanel universe={props.universe} onAnalyze={props.onAnalyze} onExplain={props.onExplain} />}
+          {tab === 'My holdings' && (
+            <HoldingsPanel view={props.holdings} onAdd={props.onAddHolding} onDelete={props.onDeleteHolding} onCheck={() => onRun('holdings')} />
+          )}
+          {tab === 'Swing' && <ScanPanel title="Swing" job="eod" report={data.swing} onRun={onRun} />}
+          {tab === 'Positional' && <ScanPanel title="Positional" job="positional" report={data.positional} onRun={onRun} />}
+          {tab === 'BTST' && <ScanPanel title="BTST" job="btst" report={data.btst} onRun={onRun} />}
+          {tab === 'Predictions' && (
+            <PredictionsPanel initial={props.scorecard} dates={props.predictionDates} loadScorecard={props.loadScorecard}
+                              loadDates={props.loadPredictionDates} loadDay={props.loadPredictions} onRunReplay={() => onRun('replay')} />
+          )}
+          {tab === 'Track record' && <TrackRecordPanel performance={props.performance} />}
+          {tab === 'News' && <NewsPanel news={data.news} onCheck={() => onRun('news')} />}
+          {tab === 'Events' && <EventsPanel events={data.events} />}
+        </main>
+
+        <footer className="footnote page-foot">
+          Updated {istTime(data.serverTime)} · Rule-based signals, not predictions of certainty. Not investment advice.
+        </footer>
+      </div>
+    </div>
   )
 }

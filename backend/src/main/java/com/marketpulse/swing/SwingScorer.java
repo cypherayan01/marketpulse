@@ -34,11 +34,13 @@ public class SwingScorer {
     static final int MAX_BEARISH_POINTS = 62;
 
     public TradeSignal score(IndicatorSnapshot s, double niftyReturn3m) {
-        Factors f = new Factors()
-                // Trend
-                .either(s.close() > s.ema200(), 10,
-                        "Above 200-day EMA (long-term uptrend)", "Below 200-day EMA (long-term downtrend)")
-                .either(s.ema20() > s.ema50(), 8,
+        Factors f = new Factors();
+        // Trend. A recent listing has no 200-day EMA yet (NaN) - leave it out rather than read it as "below".
+        if (!Double.isNaN(s.ema200())) {
+            f.either(s.close() > s.ema200(), 10,
+                    "Above 200-day EMA (long-term uptrend)", "Below 200-day EMA (long-term downtrend)");
+        }
+        f.either(s.ema20() > s.ema50(), 8,
                         "20-day EMA above 50-day (medium-term uptrend)", "20-day EMA below 50-day (medium-term downtrend)")
                 .either(s.close() > s.ema20(), 5, "Price above 20-day EMA", "Price below 20-day EMA")
                 // Momentum

@@ -7,9 +7,14 @@ import com.marketpulse.events.MarketEvent;
 import com.marketpulse.market.Candle;
 import com.marketpulse.market.IntradayDataClient;
 import com.marketpulse.market.MarketDataClient;
+import com.marketpulse.reports.IndexLines;
 import com.marketpulse.reports.ReportStore;
+import com.marketpulse.reports.Section;
+import com.marketpulse.reports.SectionBuilder;
 import com.marketpulse.reports.ScanReport;
 import com.marketpulse.signals.TradeStyle;
+import com.marketpulse.universe.Segment;
+import com.marketpulse.signals.Classification;
 import com.marketpulse.signals.TradeSignal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,6 +52,8 @@ public class BtstScanService {
     private final BtstSettings settings;
     private final ReportStore store;
 
+    private final Object runLock = new Object();
+
     public BtstScanService(MarketDataClient dailyData, IntradayDataClient intradayData, BtstCalculator calculator,
                            BtstScorer scorer, AlertDispatcher dispatcher, EventCalendar calendar, Clock clock,
                            BtstSettings settings, ReportStore store) {
@@ -62,7 +69,13 @@ public class BtstScanService {
     }
 
     /** @param force run even without a session today (testing) */
-    public synchronized BtstRunSummary run(boolean force) {
+    public BtstRunSummary run(boolean force) {
+        synchronized (runLock) { // private lock: outside code can never hold it
+            return runLocked(force);
+        }
+    }
+
+    private BtstRunSummary runLocked(boolean force) {
         LocalDateTime now = LocalDateTime.now(clock.withZone(IST));
         LocalDate today = now.toLocalDate();
         List<Candle> index;
@@ -83,45 +96,81 @@ public class BtstScanService {
                 .filter(e -> e.type() == EventType.MACRO)
                 .toList();
 
-        List<TradeSignal> signals = new ArrayList<>();
+        // Pass 1: every stock on today's daily candle alone (no intraday request yet).
+        List<Candidate> prescored = new ArrayList<>();
         List<String> failed = new ArrayList<>();
         List<String> resultsDue = new ArrayList<>();
-        for (String symbol : settings.universe()) {
+        for (String symbol : settings.universe().symbols()) {
             try {
-                BtstSnapshot snapshot = calculator.calculate(symbol, dailyData.dailyCandles(symbol),
-                        intradayData.intradayCandles(symbol), sessionFraction);
+                List<Candle> daily = dailyData.dailyCandles(symbol);
                 LocalDate results = calendar.nextResults(symbol, today, daysToNextSession)
                         .map(MarketEvent::date).orElse(null);
                 if (results != null) {
                     resultsDue.add(symbol);
                 }
-                signals.add(scorer.score(snapshot, niftyChange, results));
+                TradeSignal pre = scorer.score(calculator.calculate(symbol, daily, List.of(), sessionFraction),
+                        niftyChange, results);
+                prescored.add(new Candidate(symbol, daily, results, pre));
             } catch (RuntimeException e) {
                 log.warn("Skipping {}: {}", symbol, e.getMessage());
                 failed.add(symbol);
             }
         }
 
-        List<TradeSignal> candidates = signals.stream()
-                .filter(s -> s.classification().bullish())
-                .sorted(Comparator.comparingInt(TradeSignal::score).reversed())
-                .limit(settings.topN())
+        // Pass 2: only the most promising per segment get 15-minute bars and a full score.
+        List<TradeSignal> signals = new ArrayList<>();
+        for (Segment segment : Segment.values()) {
+            List<Candidate> shortlist = prescored.stream()
+                    .filter(c -> settings.universe().segmentOf(c.symbol()) == segment)
+                    .filter(c -> !c.prescore().classification().bearish() && c.prescore().score() >= 50)
+                    .sorted(Comparator.comparingInt((Candidate c) -> c.prescore().score()).reversed())
+                    .limit(settings.intradayPerSegment())
+                    .toList();
+            for (Candidate c : shortlist) {
+                try {
+                    BtstSnapshot full = calculator.calculate(c.symbol(), c.daily(),
+                            intradayData.intradayCandles(c.symbol()), sessionFraction);
+                    signals.add(scorer.score(full, niftyChange, c.resultsDate()));
+                } catch (RuntimeException e) {
+                    log.warn("No intraday bars for {}: {}", c.symbol(), e.getMessage());
+                }
+            }
+        }
+
+        // Overnight risk is real: only STRONG setups (score 80+) are BTST candidates.
+        List<TradeSignal> strong = signals.stream()
+                .filter(s -> s.classification() == Classification.STRONG_BULLISH)
                 .toList();
+        List<Section> grouped = SectionBuilder.build(strong, settings.universe(), settings.topN(), Map.of());
+        Map<Segment, String> lines = IndexLines.today(dailyData, grouped.stream().map(Section::segment).toList());
+        List<Section> sections = grouped.stream()
+                .map(s -> new Section(s.segment(), lines.get(s.segment()), s.scanned(), s.bullish(), List.of()))
+                .filter(s -> !s.bullish().isEmpty())
+                .toList();
+        List<TradeSignal> candidates = SectionBuilder.topBullish(strong, settings.topN());
+        int candidateCount = sections.stream().mapToInt(s -> s.bullish().size()).sum();
 
         List<String> notes = new ArrayList<>();
+        String incomplete = IndexLines.incompleteWarning(failed.size(), settings.universe().symbols().size());
+        if (!incomplete.isEmpty()) {
+            notes.add(incomplete.substring(3)); // the dashboard adds its own warning icon
+        }
         overnight.forEach(e -> notes.add("Overnight event risk: " + e.title()));
         if (!resultsDue.isEmpty()) {
             notes.add("Excluded - Results due: " + String.join(", ", resultsDue));
         }
         store.saveScan(new ScanReport(TradeStyle.BTST, clock.instant(), today,
                 String.format(Locale.ENGLISH, "Nifty %+.2f%% today", niftyChange), candidates, List.of(), Map.of(),
-                overnight, signals.size(), failed, notes));
+                overnight, prescored.size(), failed, notes, sections));
 
-        boolean sent = dispatcher.send(BtstReportFormatter.subject(today, candidates.size()),
-                BtstReportFormatter.body(niftyChange, candidates, overnight, resultsDue, signals.size(), failed));
-        BtstRunSummary summary = new BtstRunSummary(signals.size(), failed.size(), candidates.size(), sent, null);
-        log.info("BTST scan finished: {}", summary);
+        boolean sent = dispatcher.send(BtstReportFormatter.subject(today, candidateCount) + (incomplete.isEmpty() ? "" : " (incomplete)"),
+                BtstReportFormatter.body(niftyChange, sections, overnight, resultsDue, prescored.size(), failed));
+        BtstRunSummary summary = new BtstRunSummary(prescored.size(), failed.size(), candidateCount, sent, null);
+        log.info("BTST scan finished: {} ({} intraday requests)", summary, signals.size());
         return summary;
+    }
+
+    private record Candidate(String symbol, List<Candle> daily, LocalDate resultsDate, TradeSignal prescore) {
     }
 
     /** Share of the 09:15-15:30 session elapsed; 1.0 outside market hours. */

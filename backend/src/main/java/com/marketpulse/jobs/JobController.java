@@ -9,6 +9,8 @@ import com.marketpulse.positional.PositionalScanService;
 import com.marketpulse.swing.EodWatchlistService;
 import com.marketpulse.tracking.SignalTracker;
 import com.marketpulse.holdings.HoldingsCheckService;
+import com.marketpulse.predictions.PredictionUpdater;
+import com.marketpulse.predictions.ReplayService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,13 +34,16 @@ public class JobController {
     private final BtstScanService btstScanService;
     private final SignalTracker signalTracker;
     private final HoldingsCheckService holdingsCheck;
+    private final PredictionUpdater predictionUpdater;
+    private final ReplayService replay;
     private final BackgroundJobs background;
     private final String jobToken;
 
     public JobController(NewsAlertService newsAlertService, EodWatchlistService eodWatchlistService,
                          PreMarketBriefService preMarketBriefService, PositionalScanService positionalScanService,
                          BtstScanService btstScanService, SignalTracker signalTracker,
-                         HoldingsCheckService holdingsCheck, BackgroundJobs background, MarketPulseProperties props) {
+                         HoldingsCheckService holdingsCheck, PredictionUpdater predictionUpdater, ReplayService replay,
+                         BackgroundJobs background, MarketPulseProperties props) {
         this.newsAlertService = newsAlertService;
         this.eodWatchlistService = eodWatchlistService;
         this.preMarketBriefService = preMarketBriefService;
@@ -46,6 +51,8 @@ public class JobController {
         this.btstScanService = btstScanService;
         this.signalTracker = signalTracker;
         this.holdingsCheck = holdingsCheck;
+        this.predictionUpdater = predictionUpdater;
+        this.replay = replay;
         this.background = background;
         this.jobToken = props.jobToken();
     }
@@ -59,17 +66,25 @@ public class JobController {
     }
 
     /**
-     * After the close: the swing scan, paper-trade tracking, then your holdings check. Takes longer than
+     * After the close: the swing scan, paper-trade tracking, prediction checkpoints, then your holdings check.
+     * Takes longer than
      * cron-job.org's timeout, so it runs in the background: 202 Accepted.
      */
     @PostMapping("/eod")
     public ResponseEntity<Void> runEod(@RequestHeader(value = "X-Job-Token", required = false) String token,
                                        @RequestParam(defaultValue = "false") boolean force) {
-        return start(token, "EOD scan + tracking + holdings", () -> {
+        return start(token, "EOD scan + tracking + predictions + holdings", () -> {
             eodWatchlistService.run(force);
             signalTracker.update();
+            predictionUpdater.update();
             holdingsCheck.run(force);
         });
+    }
+
+    /** Replays the past year of scans to estimate how predictions would have done (several minutes). */
+    @PostMapping("/replay")
+    public ResponseEntity<Void> runReplay(@RequestHeader(value = "X-Job-Token", required = false) String token) {
+        return start(token, "History replay", replay::run);
     }
 
     /** Holdings check on its own (it also runs after every /jobs/eod). */

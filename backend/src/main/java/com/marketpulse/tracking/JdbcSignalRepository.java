@@ -3,6 +3,7 @@ package com.marketpulse.tracking;
 import com.marketpulse.signals.Classification;
 import com.marketpulse.signals.Confidence;
 import com.marketpulse.signals.TradeStyle;
+import com.marketpulse.universe.Segment;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 import java.sql.ResultSet;
@@ -16,7 +17,7 @@ public class JdbcSignalRepository implements SignalRepository {
 
     private static final String COLUMNS = """
             id, style, symbol, signal_date, score, classification, confidence, entry_price, stop_price, target_price,
-            status, exit_date, exit_price, return_pct, max_gain_pct, max_loss_pct, sessions_held, created_at""";
+            status, exit_date, exit_price, return_pct, max_gain_pct, max_loss_pct, sessions_held, created_at, segment""";
 
     private final JdbcClient jdbc;
 
@@ -39,9 +40,9 @@ public class JdbcSignalRepository implements SignalRepository {
         jdbc.sql("""
                         INSERT INTO tracked_signal (style, symbol, signal_date, score, classification, confidence,
                             entry_price, stop_price, target_price, status, max_gain_pct, max_loss_pct, sessions_held,
-                            created_at)
+                            created_at, segment)
                         VALUES (:style, :symbol, :day, :score, :classification, :confidence, :entry, :stop, :target,
-                            :status, :maxGain, :maxLoss, :sessions, :createdAt)""")
+                            :status, :maxGain, :maxLoss, :sessions, :createdAt, :segment)""")
                 .param("style", s.style().name())
                 .param("symbol", s.symbol())
                 .param("day", s.signalDate())
@@ -56,6 +57,7 @@ public class JdbcSignalRepository implements SignalRepository {
                 .param("maxLoss", s.maxLossPct())
                 .param("sessions", s.sessionsHeld())
                 .param("createdAt", OffsetDateTime.ofInstant(s.createdAt(), ZoneOffset.UTC))
+                .param("segment", s.segment() == null ? null : s.segment().name())
                 .update();
         return true;
     }
@@ -109,6 +111,7 @@ public class JdbcSignalRepository implements SignalRepository {
                 rs.getDouble("max_gain_pct"),
                 rs.getDouble("max_loss_pct"),
                 rs.getInt("sessions_held"),
-                rs.getObject("created_at", OffsetDateTime.class).toInstant());
+                rs.getObject("created_at", OffsetDateTime.class).toInstant(),
+                rs.getString("segment") == null ? null : Segment.valueOf(rs.getString("segment")));
     }
 }

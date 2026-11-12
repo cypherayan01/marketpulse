@@ -1,6 +1,8 @@
 package com.marketpulse.positional;
 
 import com.marketpulse.events.MarketEvent;
+import com.marketpulse.reports.IndexLines;
+import com.marketpulse.reports.Section;
 import com.marketpulse.signals.TradePlan;
 import com.marketpulse.signals.TradeSignal;
 
@@ -13,7 +15,7 @@ import java.util.Map;
 
 import static com.marketpulse.signals.Money.rupees;
 
-/** Plain-text weekly positional outlook for Telegram and email. */
+/** Plain-text weekly positional outlook, one section per market-cap segment. */
 final class PositionalReportFormatter {
 
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH);
@@ -28,44 +30,46 @@ final class PositionalReportFormatter {
                 .formatted(DAY.format(weekEnding), bullish, bearish);
     }
 
-    static String body(PositionalSnapshot index, List<TradeSignal> bullish, List<TradeSignal> bearish,
-                       Map<String, MarketEvent> resultsSoon, List<MarketEvent> events, LocalDate today,
-                       int scanned, List<String> failed) {
+    static String body(PositionalSnapshot index, List<Section> sections, Map<String, MarketEvent> resultsSoon,
+                       List<MarketEvent> events, LocalDate today, int scanned, List<String> failed) {
         StringBuilder sb = new StringBuilder();
-        sb.append("Market: ").append(marketLine(index)).append("\n\n");
+        sb.append("Market: ").append(marketLine(index)).append('\n');
+        String incomplete = IndexLines.incompleteWarning(failed.size(), scanned + failed.size());
+        if (!incomplete.isEmpty()) {
+            sb.append(incomplete).append('\n');
+        }
+        sb.append("Positional setups: weekly chart, hold ~1-6 months.\n");
 
-        sb.append("🟢 POSITIONAL SETUPS (weekly chart, hold ~1-6 months)\n");
-        if (bullish.isEmpty()) {
-            sb.append("No strong long-term setups this week.\n");
-        }
-        int n = 1;
-        for (TradeSignal s : bullish) {
-            TradePlan p = s.plan();
-            sb.append("\n%d. %s - %d/100 %s · confidence %s%n".formatted(n++, s.symbol(), s.score(),
-                    s.classification().label(), s.confidence()));
-            sb.append(String.format(Locale.ENGLISH, "   Close %s | Stop %s (-%.1f%%) | Target %s%n",
-                    rupees(p.entry()), rupees(p.stopLoss()), p.riskPct(), rupees(p.target())));
-            sb.append("   Why: ").append(String.join("; ", s.bullishFactors())).append('\n');
-            if (!s.bearishFactors().isEmpty()) {
-                sb.append("   ⚠️ Watch: ").append(String.join("; ", s.bearishFactors())).append('\n');
+        for (Section section : sections) {
+            String indexLine = section.indexLine() != null ? section.indexLine() : section.segment().indexName();
+            sb.append("\n%s %s · %s · %d scanned%n".formatted(section.segment().icon(),
+                    section.segment().title().toUpperCase(Locale.ENGLISH), indexLine, section.scanned()));
+            sb.append(section.bullish().isEmpty() ? "🟢 No strong long-term setups.\n" : "🟢 Setups\n");
+            int n = 1;
+            for (TradeSignal s : section.bullish()) {
+                TradePlan p = s.plan();
+                sb.append("%d. %s %d · %s · confidence %s%n".formatted(n++, s.symbol(), s.score(),
+                        s.classification().label(), s.confidence()));
+                sb.append(String.format(Locale.ENGLISH, "   Close %s · Stop %s (-%.1f%%) · Target %s%n",
+                        rupees(p.entry()), rupees(p.stopLoss()), p.riskPct(), rupees(p.target())));
+                sb.append("   Why: ").append(String.join("; ", s.bullishFactors().stream().limit(3).toList())).append('\n');
+                if (!s.bearishFactors().isEmpty()) {
+                    sb.append("   ⚠️ ").append(String.join("; ", s.bearishFactors())).append('\n');
+                }
+                MarketEvent results = resultsSoon.get(s.symbol());
+                if (results != null) {
+                    sb.append("   ⚠️ Results on %s (in %d days) - consider waiting for the numbers before entering%n"
+                            .formatted(SHORT_DAY.format(results.date()), ChronoUnit.DAYS.between(today, results.date())));
+                }
+                sb.append("   ✋ ").append(s.invalidation()).append('\n');
             }
-            MarketEvent results = resultsSoon.get(s.symbol());
-            if (results != null) {
-                sb.append("   ⚠️ Results on %s (in %d days) - consider waiting for the numbers before entering%n"
-                        .formatted(SHORT_DAY.format(results.date()), ChronoUnit.DAYS.between(today, results.date())));
+            if (!section.bearish().isEmpty()) {
+                sb.append("🔴 Avoid / review long-term holdings\n");
+                for (TradeSignal s : section.bearish()) {
+                    sb.append("   %s %d · %s · %s%n".formatted(s.symbol(), s.score(), rupees(s.close()),
+                            String.join("; ", s.bearishFactors().stream().limit(2).toList())));
+                }
             }
-            sb.append("   Invalidated if: ").append(s.invalidation()).append('\n');
-        }
-
-        sb.append("\n🔴 AVOID / REVIEW LONG-TERM HOLDINGS\n");
-        if (bearish.isEmpty()) {
-            sb.append("Nothing flagged.\n");
-        }
-        n = 1;
-        for (TradeSignal s : bearish) {
-            sb.append("\n%d. %s - %d/100 %s · close %s%n".formatted(n++, s.symbol(), s.score(),
-                    s.classification().label(), rupees(s.close())));
-            sb.append("   Why: ").append(String.join("; ", s.bearishFactors().stream().limit(4).toList())).append('\n');
         }
 
         if (!events.isEmpty()) {
@@ -76,8 +80,9 @@ final class PositionalReportFormatter {
         }
 
         sb.append("\nScanned %d stocks".formatted(scanned));
-        if (!failed.isEmpty()) {
-            sb.append(" · Data unavailable: ").append(String.join(", ", failed));
+        String skipped = IndexLines.skipped(failed);
+        if (!skipped.isEmpty()) {
+            sb.append(" · ").append(skipped);
         }
         sb.append("\n\nRule-based signals on weekly candles, not predictions. Review fundamentals and results "
                 + "dates before investing. Not investment advice.");

@@ -46,6 +46,8 @@ public class PreMarketBriefService {
     private final BriefSettings settings;
     private final ReportStore store;
 
+    private final Object runLock = new Object();
+
     public PreMarketBriefService(MarketDataClient market, List<CueDefinition> cues, List<NewsSource> sources,
                                  NewsRelevanceFilter filter, EventCalendar calendar, BriefWriter writer,
                                  AlertDispatcher dispatcher, Clock clock, BriefSettings settings,
@@ -62,7 +64,13 @@ public class PreMarketBriefService {
         this.store = store;
     }
 
-    public synchronized BriefRunSummary run(boolean force) {
+    public BriefRunSummary run(boolean force) {
+        synchronized (runLock) { // private lock: outside code can never hold it
+            return runLocked(force);
+        }
+    }
+
+    private BriefRunSummary runLocked(boolean force) {
         LocalDate today = LocalDate.now(clock.withZone(IST));
         if (!force && isWeekend(today)) {
             return BriefRunSummary.skipped("No brief on the weekend");

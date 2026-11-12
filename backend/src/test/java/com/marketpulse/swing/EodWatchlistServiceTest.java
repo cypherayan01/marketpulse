@@ -11,6 +11,9 @@ import com.marketpulse.market.MarketDataClient;
 import com.marketpulse.market.TestCandles;
 import com.marketpulse.reports.ReportStore;
 import com.marketpulse.signals.TradeStyle;
+import com.marketpulse.universe.IndexMember;
+import com.marketpulse.universe.Segment;
+import com.marketpulse.universe.Universe;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -69,6 +72,75 @@ class EodWatchlistServiceTest {
         assertThat(report.bearish()).extracting(s -> s.symbol()).containsExactly("DOWNCO");
         assertThat(report.resultsSoon()).containsEntry("UPCO", TODAY.plusDays(6));
         assertThat(report.scanned()).isEqualTo(2);
+    }
+
+    @Test
+    void reportsEachMarketCapSegmentSeparately() {
+        market.put("^NSEI", TestCandles.trend(400, 20000, 0.0005, 0, TODAY));
+        market.put("^CNX100", TestCandles.trend(400, 26000, 0.001, 0, TODAY));      // Nifty 100 index
+        market.put("BIGCO", TestCandles.trend(400, 100, 0.004, 1_000, TODAY));
+        market.put("TINYCO", TestCandles.trend(400, 100, 0.005, 1_000, TODAY));
+        market.put("SLIDER", TestCandles.trend(400, 100, -0.004, 1_000, TODAY));
+        Universe universe = Universe.of(List.of(member("BIGCO")), List.of(), List.of(member("TINYCO"), member("SLIDER")),
+                List.of(member("BIGCO"), member("TINYCO"), member("SLIDER")));
+
+        EodRunSummary summary = new EodWatchlistService(market, new IndicatorCalculator(), new SwingScorer(),
+                new AlertDispatcher(List.of(notifier)), calendar, clock,
+                new SwingSettings(universe, "^NSEI", 6, 15), store).run(false);
+
+        String body = bodies.getFirst();
+        assertThat(body).contains("🔵 LARGE CAP · Nifty 100 +0.10% today · 1 scanned")
+                .contains("🟠 SMALL CAP · Nifty Smallcap 100 · 2 scanned");
+        assertThat(body.indexOf("BIGCO")).isLessThan(body.indexOf("SMALL CAP"));
+        assertThat(body.indexOf("SMALL CAP")).isLessThan(body.indexOf("TINYCO"));
+        assertThat(summary.bullish()).isEqualTo(2);
+        assertThat(summary.bearish()).isEqualTo(1);
+
+        var report = store.latestScan(TradeStyle.SWING).orElseThrow();
+        assertThat(report.sections()).extracting(s -> s.segment()).containsExactly(Segment.LARGE, Segment.SMALL);
+        assertThat(report.sections().get(1).bearish()).extracting(s -> s.symbol()).containsExactly("SLIDER");
+        assertThat(report.bullish()).extracting(s -> s.symbol()).containsExactlyInAnyOrder("TINYCO", "BIGCO"); // best overall
+    }
+
+    @Test
+    void summarisesManyStocksWithoutDataInOneLine() {
+        market.put("^NSEI", TestCandles.trend(400, 20000, 0.0005, 0, TODAY));
+        market.put("UPCO", TestCandles.trend(400, 100, 0.004, 1_000, TODAY));
+        List<String> universe = new java.util.ArrayList<>(List.of("UPCO"));
+        for (int i = 0; i < 8; i++) universe.add("NEWIPO" + i);
+
+        service(universe, 5).run(false);
+
+        assertThat(bodies.getFirst()).contains("8 skipped (new listings or no data)").doesNotContain("NEWIPO3");
+    }
+
+    @Test
+    void warnsClearlyWhenMuchOfTheDataIsMissing() {
+        market.put("^NSEI", TestCandles.trend(400, 20000, 0.0005, 0, TODAY));
+        market.put("UPCO", TestCandles.trend(400, 100, 0.004, 1_000, TODAY));
+        market.put("DOWNCO", TestCandles.trend(400, 100, -0.004, 1_000, TODAY));
+        // LOST1, LOST2 and OK3 have no data (e.g. a network drop) - 3 of 5 missing
+
+        service(List.of("UPCO", "DOWNCO", "LOST1", "LOST2", "OK3"), 5).run(false);
+
+        assertThat(bodies.getFirst()).contains("⚠️ Data incomplete: 3 of 5 stocks could not be fetched");
+        assertThat(subjects.getFirst()).contains("(incomplete)");
+    }
+
+    @Test
+    void aFewMissingNewListingsAreNotAnIncompleteScan() {
+        market.put("^NSEI", TestCandles.trend(400, 20000, 0.0005, 0, TODAY));
+        List<String> universe = new java.util.ArrayList<>();
+        for (int i = 0; i < 20; i++) {
+            market.put("CO" + i, TestCandles.trend(400, 100, 0.001 * (i % 5), 1_000, TODAY));
+            universe.add("CO" + i);
+        }
+        universe.add("NEWIPO"); // 1 of 21 missing - under 10%
+
+        service(universe, 5).run(false);
+
+        assertThat(bodies.getFirst()).doesNotContain("Data incomplete");
+        assertThat(subjects.getFirst()).doesNotContain("incomplete");
     }
 
     @Test
@@ -138,6 +210,10 @@ class EodWatchlistServiceTest {
 
         assertThat(bodies.getFirst()).contains("UPCOMING EVENTS").contains("US CPI inflation data")
                 .doesNotContain("Too far away");
+    }
+
+    private static IndexMember member(String symbol) {
+        return new IndexMember(symbol, symbol, "");
     }
 
     private EodWatchlistService service(List<String> universe, int topN) {

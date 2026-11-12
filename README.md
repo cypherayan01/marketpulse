@@ -80,7 +80,7 @@ specified by `PositionalScorerTest`. Universe: `marketpulse.positional.universe`
 ## Phase 5: BTST 3 PM scan (done)
 
 ```
-cron-job.org (Mon-Fri 15:00 IST)
+cron-job.org (Mon-Fri 14:50 IST)
    └─ POST /jobs/btst → 202, runs in background (~40 s: daily + 15-min bars per stock)
         → skip if no session today unless ?force=true
         → today's session so far: close location in the day's range, day change, volume projected
@@ -100,11 +100,13 @@ few minutes - fine for picking candidates; check the live price in your broker a
 ```
 frontend/ (React 19 + TypeScript + Vite, deployed on Vercel)
    └─ GET  /api/dashboard   Authorization: Bearer <DASHBOARD_TOKEN>
-   └─ POST /api/run/{news|premarket|eod|positional|btst}   start a job from the UI
+   └─ POST /api/run/{news|premarket|eod|positional|btst|track|holdings|predictions|replay}   start a job from the UI
 backend: every job saves its latest output in ReportStore (in memory) → one JSON response
 ```
 
-- Tabs: Overview (brief + latest picks + recent alerts), Swing, Positional, BTST, News, Events.
+- Sidebar layout (dark theme, Inter font, lucide icons, phone-friendly). Tabs: Overview (market / VIX / holdings /
+  hit-rate tiles, brief with "Write the brief now", latest picks, recent alerts), Analyse a stock, My holdings,
+  Swing, Positional, BTST, Predictions, Track record, News ("Check news now"), Events.
 - Signal cards: score, plan (entry / stop / target), why, ⚠️ watch-outs, results warning, invalidation.
 - `DASHBOARD_TOKEN` is separate from `JOB_TOKEN`; CORS allows only `DASHBOARD_ORIGINS`.
 - After a Render restart the store is empty until jobs run - each tab offers "Run … scan now"
@@ -129,7 +131,7 @@ Also stored in the database now: results dates found in news, and the latest das
 (so a Render restart no longer empties the dashboard or forgets those dates).
 
 **Database:** Spring JDBC + Flyway (`backend/src/main/resources/db/migration`). Without
-`DATABASE_URL` the app uses in-memory H2 (zero setup, but lost on restart). For production use
+`DATABASE_URL` the app uses a local H2 file (`backend/data/`, zero setup, kept across restarts). For production use
 free Postgres on **Neon**:
 1. neon.tech → new project (region close to Render, e.g. Singapore) → Connection details →
    choose **Java** to get a `jdbc:postgresql://…?sslmode=require` URL.
@@ -154,11 +156,77 @@ has NSE price data). After every close, `/jobs/eod` also checks them:
 You get a "💼 Holdings check" message (exits first, P&L in % and ₹), and the tab shows the same.
 `POST /jobs/holdings` runs it on its own; adding a holding on the dashboard checks it right away.
 
+## All market caps (Nifty 500)
+
+Swing, positional and BTST scans cover all of **Nifty 500**, reported in sections:
+
+| Section | Index | Stocks |
+|---|---|---|
+| 🔵 Large cap | Nifty 100 | 100 |
+| 🟣 Mid cap | Nifty Midcap 100 | 100 |
+| 🟠 Small cap | Nifty Smallcap 100 | 100 |
+| ⚪ Other Nifty 500 | rest of Nifty 500 | ~200 |
+
+Each section lists its top 6 setups and top 6 to avoid, with the segment index's own move in the header.
+The dashboard has an All / Large / Mid / Small / Other filter, and the track record compares results by segment.
+
+- Index lists are bundled in `backend/src/main/resources/indices` (from niftyindices.com). NSE rebalances
+  them in March and September - refresh with `scripts/update-indices.sh`, run the tests, commit.
+- A 500-stock scan takes ~4 minutes (Yahoo requests are spaced 300 ms apart). Daily candles are cached for
+  20 minutes, so tracking and the holdings check after the swing scan reuse them.
+- BTST only lists **strong** setups (score 80+), at most 3 per section - overnight risk is real.
+- BTST pre-scores all 500 on today's candle and fetches 15-minute bars only for the best 10 per segment -
+  **schedule `/jobs/btst` at 14:50** so it finishes well before 15:25.
+- Stocks with too little history (new listings, demergers) are skipped and counted in one line. A stock with
+  under 200 days of history simply has no 200-day EMA factor (it is not penalised as "below" it).
+- Network drops are retried (2 s, then 5 s). If more than 10% of stocks still have no data, the report says
+  "⚠️ Data incomplete" (and the subject ends with "(incomplete)") instead of silently showing partial lists.
+- Yahoo has no history for the Midcap/Smallcap 100 indices: day moves come from a live quote, and the weekly
+  report describes those segments by their stocks' median 6-month return.
+- To scan your own list instead, set `marketpulse.swing.universe: [RELIANCE, TCS, ...]`.
+
+## Analyse a stock
+
+Dashboard tab **Analyse a stock** (`GET /api/analyze/{symbol}`) works for any NSE stock, not just Nifty 500:
+
+| Swing (daily) | Positional (weekly) | Verdict for a new buyer |
+|---|---|---|
+| bullish | bullish | **Buy** - short and long term agree |
+| bullish | not bullish / no history | **Buy for a swing** only |
+| not bullish | bullish | **Accumulate** - wait for a better entry or buy in parts |
+| bearish | bearish / no history | **Avoid** (in the cash market "sell" = don't buy / exit if you hold) |
+| otherwise | | **Wait** - mixed signals |
+
+Tick "I already own this stock" (buy price, date, quantity, horizon, optional stop) to get **Keep / Review /
+Exit** with the same trailing-stop rules as the holdings check. Also shown: results date, recent scored news,
+segment and industry. **Explain with AI** (`POST /api/analyze/{symbol}/explain`) has Claude write a plain-English
+summary from the computed numbers - one API call per click. During market hours the price is the live one.
+
+## Prediction tracking (scorecard)
+
+Every bullish (**Buy**) and bearish (**Avoid**) call in the swing, positional and BTST reports is saved with
+the price, Nifty's close that day and the news sentiment for the stock (recorded only, not used in scoring yet).
+After each close `/jobs/eod` fills in what happened after **1, 2, 3, 5, 10, 20, 40 and 60 sessions**:
+
+- **Right** = beat Nifty over that window (Buy: stock − Nifty > 0, Avoid: Nifty − stock > 0). Beating the
+  index is the bar, because in a rising market almost everything goes up.
+- **BTST** is also judged on the next morning: did it open higher, and how high did it get during the day.
+
+Dashboard tab **Predictions**: hit rate per checkpoint (50% = coin flip), average edge vs Nifty, breakdowns by
+score band, market cap and news agreement, and a day picker ("what did it say on 11 Nov, how did it go?").
+The **Track record** tab (paper trades with stop/target) stays as it was - both views are kept.
+
+**History replay** (`POST /jobs/replay`, or the button in the tab; ~4 min, 500 stocks × 250 sessions) rebuilds
+the same calls for the past year using only data available on each day, so you get a scorecard without waiting
+months. It's an estimate: today's index lists (survivorship bias), no news, and BTST without the last-hour data.
+First run (Nov 2026): swing ~50% right at 1-20 days (no edge yet), positional ~53% at 40-60 days (+1.6-1.9 pts),
+BTST opened higher 61% of the time with an average next-day high of +1.9%.
+
 ## Run locally
 
 ```bash
 cd backend
-./mvnw test                                   # 211 tests (H2 for the database tests)
+./mvnw test                                   # 295 tests (in-memory H2 for the database tests)
 # dashboard API: also set DASHBOARD_TOKEN=... (and DASHBOARD_ORIGINS for a non-local frontend)
 ./mvnw -DskipTests package
 JOB_TOKEN=local-test ANTHROPIC_API_KEY=sk-ant-... java -jar target/backend-0.0.1-SNAPSHOT.jar
@@ -167,7 +235,10 @@ curl -X POST -H "X-Job-Token: local-test" "localhost:8080/jobs/eod?force=true"  
 curl -X POST -H "X-Job-Token: local-test" "localhost:8080/jobs/premarket?force=true"  # uses one Opus call
 curl -X POST -H "X-Job-Token: local-test" localhost:8080/jobs/positional
 curl -X POST -H "X-Job-Token: local-test" "localhost:8080/jobs/btst?force=true"
+curl -X POST -H "X-Job-Token: local-test" localhost:8080/jobs/replay                  # past-year scorecard
 ```
+
+Spring doesn't read `backend/.env` by itself - load it into the shell first: `set -a; source .env; set +a`.
 
 Without Telegram/email configured, alerts are printed to the log.
 
@@ -195,7 +266,7 @@ The default sender `onboarding@resend.dev` can only email the address you signed
    - third job: `POST /jobs/premarket`, same header, **Mon-Fri 08:30, timezone Asia/Kolkata**
    - (`/jobs/eod` also runs paper-trade tracking and the holdings check - no extra jobs needed)
    - fourth job: `POST /jobs/positional`, same header, **Sunday 18:00, timezone Asia/Kolkata**
-   - fifth job: `POST /jobs/btst`, same header, **Mon-Fri 15:00, timezone Asia/Kolkata**
+   - fifth job: `POST /jobs/btst`, same header, **Mon-Fri 14:50, timezone Asia/Kolkata** (500-stock scan takes ~4 min)
 4. Anthropic Console → set a monthly spend limit.
 5. Vercel → import the repo with Root Directory `frontend`, set `VITE_API_BASE_URL` to the Render URL,
    then put the Vercel URL in Render's `DASHBOARD_ORIGINS`.

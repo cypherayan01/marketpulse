@@ -1,7 +1,7 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { swingReport } from '../test/fixtures'
+import { segmentedReport, swingReport } from '../test/fixtures'
 import { ScanPanel } from './ScanPanel'
 
 describe('ScanPanel', () => {
@@ -29,6 +29,35 @@ describe('ScanPanel', () => {
     render(<ScanPanel title="BTST" job="btst" report={report} onRun={vi.fn()} />)
 
     expect(screen.getByText('Overnight event risk: US Fed rate decision')).toBeInTheDocument()
+  })
+
+  it('shows one section per market-cap segment with its index move', () => {
+    render(<ScanPanel title="Swing" job="eod" report={segmentedReport} onRun={vi.fn()} />)
+
+    const large = screen.getByRole('region', { name: 'Large cap' })
+    expect(within(large).getByText('Nifty 100 +0.62% today · 100 scanned')).toBeInTheDocument()
+    expect(within(large).getByRole('heading', { name: 'HDFCBANK' })).toBeInTheDocument()
+    expect(within(large).getByRole('heading', { name: 'NTPC' })).toBeInTheDocument()
+    const small = screen.getByRole('region', { name: 'Small cap' })
+    expect(within(small).getByText('Nifty Smallcap 100 · 98 scanned')).toBeInTheDocument()
+    expect(within(small).getByRole('heading', { name: 'AARTIIND' })).toBeInTheDocument()
+  })
+
+  it('filters to one market-cap segment', async () => {
+    render(<ScanPanel title="Swing" job="eod" report={segmentedReport} onRun={vi.fn()} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Small cap' }))
+
+    expect(screen.getByRole('button', { name: 'Small cap' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByRole('region', { name: 'Large cap' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'AARTIIND' })).toBeInTheDocument()
+  })
+
+  it('only offers filters for segments the report has', () => {
+    render(<ScanPanel title="Swing" job="eod" report={segmentedReport} onRun={vi.fn()} />)
+
+    expect(screen.getByRole('button', { name: 'All caps' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByRole('button', { name: 'Mid cap' })).not.toBeInTheDocument()
   })
 
   it('says so when there are no setups', () => {

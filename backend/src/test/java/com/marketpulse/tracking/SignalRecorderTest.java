@@ -6,6 +6,8 @@ import com.marketpulse.signals.Confidence;
 import com.marketpulse.signals.TradePlan;
 import com.marketpulse.signals.TradeSignal;
 import com.marketpulse.signals.TradeStyle;
+import com.marketpulse.reports.Section;
+import com.marketpulse.universe.Segment;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -43,6 +45,24 @@ class SignalRecorderTest {
         recorder.accept(report);
 
         assertThat(repository.rows).hasSize(1);
+    }
+
+    @Test
+    void recordsEverySegmentsSetupsWithTheirSegment() {
+        ScanReport report = new ScanReport(TradeStyle.SWING, Instant.parse("2026-11-12T11:00:00Z"), DAY, "Nifty",
+                List.of(bullish("TCS", 90), bullish("AARTIIND", 88)), List.of(), Map.of(), List.of(), 500, List.of(),
+                List.of(), List.of(
+                        new Section(Segment.LARGE, null, 100, List.of(bullish("TCS", 90), bullish("INFY", 80)), List.of()),
+                        new Section(Segment.SMALL, null, 100, List.of(bullish("AARTIIND", 88)), List.of())));
+        SignalRecorder segmented = new SignalRecorder(repository,
+                symbol -> symbol.equals("AARTIIND") ? Segment.SMALL : Segment.LARGE);
+
+        segmented.accept(report);
+
+        assertThat(repository.rows).extracting(TrackedSignal::symbol, TrackedSignal::segment).containsExactlyInAnyOrder(
+                org.assertj.core.groups.Tuple.tuple("TCS", Segment.LARGE),
+                org.assertj.core.groups.Tuple.tuple("INFY", Segment.LARGE),
+                org.assertj.core.groups.Tuple.tuple("AARTIIND", Segment.SMALL));
     }
 
     private static ScanReport report(List<TradeSignal> bullish, List<TradeSignal> bearish) {

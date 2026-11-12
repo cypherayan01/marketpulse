@@ -22,6 +22,14 @@ describe('TrackRecordPanel', () => {
     expect(within(swing).getByRole('row', { name: /65-79.*2.*50%.*-1.50%/ })).toBeInTheDocument()
   })
 
+  it('compares results by market cap', () => {
+    render(<TrackRecordPanel performance={performance} />)
+
+    const swing = screen.getByRole('region', { name: 'Swing track record' })
+    expect(within(swing).getByRole('row', { name: /Large cap.*3.*67%.*\+2.10%/ })).toBeInTheDocument()
+    expect(within(swing).getByRole('row', { name: /Small cap.*1.*0%.*-4.30%/ })).toBeInTheDocument()
+  })
+
   it('warns that a few trades prove nothing yet', () => {
     render(<TrackRecordPanel performance={performance} />)
 

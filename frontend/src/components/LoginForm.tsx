@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { LineChart } from 'lucide-react'
 
 interface Props {
   onLogin: (token: string) => void
@@ -15,7 +16,8 @@ export function LoginForm({ onLogin, message }: Props) {
 
   return (
     <form className="login" onSubmit={submit}>
-      <h1>MarketPulse</h1>
+      <h1><span className="brand-mark" aria-hidden="true"><LineChart size={18} /></span>MarketPulse</h1>
+      <p className="muted">Signals, scorecards and your holdings - in one place.</p>
       {message && <p className="warning">{message}</p>}
       <label htmlFor="token">Dashboard token</label>
       <input id="token" type="password" autoComplete="current-password" value={token}

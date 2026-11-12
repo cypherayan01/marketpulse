@@ -36,7 +36,7 @@ public record MarketPulseProperties(
     public record Swing(
             @DefaultValue List<String> universe,
             @DefaultValue("^NSEI") String indexSymbol,
-            @DefaultValue("5") int topN,
+            @DefaultValue("6") int topN,
             @DefaultValue("15") int resultsWarningDays) {
     }
 
@@ -72,13 +72,14 @@ public record MarketPulseProperties(
     /** @param universe stocks to scan; empty means "same as swing.universe" */
     public record Btst(
             @DefaultValue List<String> universe,
-            @DefaultValue("3") int topN) {
+            @DefaultValue("3") int topN,
+            @DefaultValue("10") int intradayPerSegment) {
     }
 
     /** @param universe stocks to scan; empty means "same as swing.universe" */
     public record Positional(
             @DefaultValue List<String> universe,
-            @DefaultValue("5") int topN,
+            @DefaultValue("6") int topN,
             @DefaultValue("14") int resultsWarningDays) {
     }
 

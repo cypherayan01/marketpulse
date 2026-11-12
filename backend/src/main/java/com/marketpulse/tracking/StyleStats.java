@@ -11,5 +11,5 @@ import java.util.List;
 public record StyleStats(TradeStyle style, int open, int closed, int wins, double winRatePct,
                          double avgReturnPct, double avgWinPct, double avgLossPct,
                          int targetHits, int stops, int expired, double bestPct, double worstPct,
-                         List<Bucket> byScore, List<Bucket> byConfidence) {
+                         List<Bucket> byScore, List<Bucket> byConfidence, List<Bucket> bySegment) {
 }

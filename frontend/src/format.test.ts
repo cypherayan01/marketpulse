@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { signedMoney, signedPct, styleName, trendClass } from './format'
+import { price, signedMoney, signedPct, styleName, trendClass } from './format'
 
 describe('format', () => {
   it('never shows a minus sign on a value that rounds to zero', () => {
@@ -19,6 +19,13 @@ describe('format', () => {
     expect(trendClass(-0.000003)).toBe('flat')
     expect(trendClass(0.5)).toBe('up')
     expect(trendClass(-0.5)).toBe('down')
+  })
+
+  it('shows card prices without paise from ₹1,000 up, so big prices fit side by side', () => {
+    expect(price(19872)).toBe('₹19,872')
+    expect(price(22500.68)).toBe('₹22,501')
+    expect(price(806.6)).toBe('₹806.60')
+    expect(price(132.17)).toBe('₹132.17')
   })
 
   it('keeps BTST in capitals', () => {

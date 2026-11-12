@@ -17,6 +17,7 @@ import static org.springframework.test.web.client.ExpectedCount.times;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withTooManyRequests;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withException;
 
 class YahooChartClientTest {
 
@@ -108,5 +109,58 @@ class YahooChartClientTest {
         assertThat(bars.getFirst().start()).isEqualTo(java.time.Instant.parse("2026-11-11T08:30:00Z")); // 14:00 IST
         assertThat(bars.getLast().close()).isEqualTo(102.0);
         assertThat(bars.getLast().volume()).isEqualTo(1500);
+    }
+
+    @Test
+    void completesALatestBarThatYahooBlankedUsingTheSameDaysMarketData() {
+        List<Candle> candles = client("HDFCBANK.NS?range=2y&interval=1d", "yahoo/blanked-last-bar.json").dailyCandles("HDFCBANK");
+
+        assertThat(candles).hasSize(3);
+        assertThat(candles.getLast()).isEqualTo(
+                new Candle(LocalDate.of(2026, 11, 11), 810.1, 817.85, 800.55, 806.6, 56_387_011));
+    }
+
+    @Test
+    void doesNotInventABarWhenTheMarketDataIsFromAnEarlierDay() {
+        List<Candle> candles = client("HDFCBANK.NS?range=2y&interval=1d", "yahoo/blanked-last-bar-stale-meta.json")
+                .dailyCandles("HDFCBANK");
+
+        assertThat(candles).hasSize(2);
+        assertThat(candles.getLast().date()).isEqualTo(LocalDate.of(2026, 11, 9));
+    }
+
+    @Test
+    void readsTheLatestPriceAndPreviousCloseAsAQuote() {
+        Quote quote = client("NIFTY_MIDCAP_100.NS?range=1d&interval=1d", "yahoo/index-quote.json")
+                .quote("NIFTY_MIDCAP_100.NS").orElseThrow();
+
+        assertThat(quote.price()).isEqualTo(61519.1);
+        assertThat(quote.previousClose()).isEqualTo(61022.55);
+        assertThat(quote.changePct()).isCloseTo(0.8137, org.assertj.core.api.Assertions.within(1e-3));
+    }
+
+    private static YahooChartClient client(String path, String fixture) {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("https://query1.finance.yahoo.com/v8/finance/chart/" + path.replace("^", "%5E")))
+                .andRespond(withSuccess(new ClassPathResource(fixture), MediaType.APPLICATION_JSON));
+        return new YahooChartClient(builder, d -> { }, Duration.ZERO);
+    }
+
+    @Test
+    void retriesAfterABriefNetworkDrop() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        String url = "https://query1.finance.yahoo.com/v8/finance/chart/M%26M.NS?range=2y&interval=1d";
+        server.expect(requestTo(url)).andRespond(withException(new java.io.IOException("Request cancelled")));
+        server.expect(requestTo(url))
+                .andRespond(withSuccess(new ClassPathResource("yahoo/chart-sample.json"), MediaType.APPLICATION_JSON));
+        List<Duration> sleeps = new ArrayList<>();
+
+        List<Candle> candles = new YahooChartClient(builder, sleeps::add, Duration.ZERO).dailyCandles("M&M");
+
+        server.verify();
+        assertThat(candles).hasSize(2);
+        assertThat(sleeps).containsExactly(Duration.ofSeconds(2));
     }
 }
